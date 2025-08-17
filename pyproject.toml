@@ -1,0 +1,10 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "code_base"
+version = "0.1.0"
+description = "Company ETL code"
+authors = [{name = "Zhe"}]
+requires-python = ">=3.10"
