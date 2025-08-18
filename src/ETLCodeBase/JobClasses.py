@@ -1102,6 +1102,708 @@ class QBOTimeETL(Job):
         else:
             print(f"\n\nQBO Time Pipeline not scheduled to run today on - {self.today}\n\n")
 
+class Projects(Job):
+    """ 
+        for project specific data transformations
+    """
+    
+    def __init__(self):
+        super().__init__()
+        self.gold_path = {
+            "weekly_banking": self.base_dir / "Gold" / "FinanceProject" / "WeeklyBanking",
+            "inventory": self.base_dir / "Gold" / "InventoryProject",
+            "payroll": self.base_dir / "Gold" / "HRProject" /"PayrollProject",
+            "finance_operational": self.base_dir / "Gold" / "FinanceOperationalProject",
+            "budget": self.base_dir / "Gold" / "BudgetProject",
+            "QBOTime": self.base_dir / "Gold" / "HRProject" / "QBOTimeProject"
+        }
+        self.silver_acc = pd.read_csv(self.silver_path["QBO"]["Dimension_time"]/"Account.csv")
+        self.commodities = {
+            "Produce": ["Strawberry", "Watermelon", "Cantaloupe", "Market Garden", "Broccoli", "Pumpkin", "Sweet Corn", "Cauliflower", "Squash", "Honeydew Melon", "Potato", "Carrot", "Cabbage",
+                        "Lettuce", "Brussel Sprouts", "Prairie Pathways", "Beet", "Corn Maze"],
+            "Grain": ["Blackeye Pea", "Winter Wheat", "Durum", "Cotton", "Chickpea", "Barley", "Green Lentil", "Red Lentil", "Canola", 
+                        "Wheat","Field Pea", "Corn", "Oat", "Soybean", "Bean"],
+            "Cattle": ["Weaned Calves", "Cull Bull", "Cull Cow", "Bred Heifer", "Purebred Yealing Bull", "Purebred Heifer", 
+                        "Purebred Cow", "Purebred Bull", "Cow", "Bull", "Steer", "Heifer", "Yearling", "Calf"]
+        }
+        self.locations = {
+            "Produce": ["BritishColumbia (produce)", "Outlook", "Arizona (produce)"],
+            "Cattle": ["Airdrie", "Eddystone (cattle)", "Ashcroft", "Home Ranch", "Diamond S", "Wolf Ranch", "Fraser River Ranch", "Moon Ranch", "Waldeck", "Calderbank"],
+            "Grain": ["Eddystone (grain)", "Arizona (grain)", "Colorado", "Swift Current", "Regina", "Raymore", "Prince Albert", "The Pas",
+                      "Kamsack", "Hafford", "Yorkton", "Fly Creek", "Camp 4", "Havre", "Billings"],
+            "Seed": ["NexGen", "Seeds", "Seeds USA"],
+            "Others": ["Eddystone (corporate)", "Arizona (corporate)", "Legacy", "BritishColumbia (corporate)", "-Corporate"]
+        }
+        self.bc_ranches = ["Ashcroft", "Fraser River Ranch", "Moon Ranch", "Wolf Ranch", "Home", "Diamond S", "BritishColumbia (corporate)","Home Ranch"]
+        self.pl_exist = False # determines whether _financial_operational has run and gold_pl is stored in self, if not, any subsequent downstream projects will run _financial_operational first
+
+    def _pillar_classification(self, entry: pd.Series) -> str:
+        """ 
+            this function classifies pillar of a transaction based on location
+        """
+        location = entry["Location"]
+        if not isinstance(location, str):
+            return "Missing"
+        if "produce" in location:
+            return "Produce"
+        elif "grain" in location:
+            return "Grain"
+        elif "cattle" in location:
+            return "Cattle"
+        elif "corporate" in location:
+            return "Unclassified"
+        match location.lower():
+            case "hafford"|"kamsack"|"prince albert"|"raymore"|"regina"|"swift current"|"the pas"|"camp 4"|"fly creek"|"havre"|"yorkton"|"colorado":
+                return "Grain"
+            case "outlook"|"seeds usa":
+                return "Produce"
+            case "ashcroft"|"diamond s"|"fraser river ranch"|"home ranch"|"moon ranch"|"wolf ranch"|"waldeck"|"calderbank"|"airdrie":
+                return "Cattle"
+            case "seeds"|"nexgen":
+                return "Seed"
+            case _:
+                return "Unclassified"
+    
+    def _identify_product(self, entry: pd.Series, for_budget:bool=False) -> str:
+        """ 
+            this function identifies commodity from account names, except for seed, 
+                if this function is called from budget project, it combines MG & CSA and take CM into consideration, and name forage differently
+        """
+        if entry["AccPillar"] == "Seed":
+            return "SeedProduct"
+        accname = entry["AccountName"].lower()
+        if "float" in accname:
+            return "Others"
+        for x in self.commodities["Produce"] + self.commodities["Grain"] + self.commodities["Cattle"]:
+            if x.lower() in accname:
+                if for_budget:
+                    match x:
+                        case "Market Garden"|"CSA":
+                            return "Market Garden / CSA"
+                        case "Corn Maze":
+                            return "Prairie Pathways"
+                    return x 
+        if "straw" in accname or "forage" in accname or "hay bale" in accname:
+            if for_budget: 
+                return "Hay/Silage" 
+            else: 
+                return "Forage"
+        return "Others"
+    
+    def _weekly_banking(self) -> None:
+        """ 
+            weekly banking project: match latest GL bank transactions with raw activities - extract accounts for those activities
+                assumptions: a raw entry (e.g., invoice) can have multiple lines - multiple associated accounts, only considering the first one 
+        """
+        print("\nStarting Weekly Banking Project Transformation\n")
+        # determine minal date to keep for GL
+        if self.today.month > 6:
+            year = self.today.year 
+            month = self.today.month - 6 
+        else:
+            year = self.today.year - 1
+            month = self.today.month + 12 - 6
+        # load and prepare data
+        ## account
+        account = self.silver_acc.copy(deep=True)
+        ## change some accounts to Transfer category
+        acc_list = ["MFL264", "MSL250"]
+        account.loc[account["AccID"].isin(acc_list), "Profitem"] = "Asset"
+        account.loc[account["AccID"].isin(acc_list), "Category"] = "Transfer"
+        account_bank = account[account["AccountType"]=="Bank"]
+        ## LinkedTxn for invoice and bill
+        invoice_linked = pd.read_csv(self.silver_path["QBO"]["Raw"] / "LinkedTxn"/ "LinkedTxn_Mapping_Invoice.csv")
+        bill_linked = pd.read_csv(self.silver_path["QBO"]["Raw"] / "LinkedTxn"/ "LinkedTxn_Mapping_Bill.csv")
+        mapping = pd.concat([invoice_linked, bill_linked])
+        mapping = mapping.drop(columns=["Corp"])
+        # define customized function for processing other raw table
+        def _process_facts(df_type:str) -> pd.DataFrame:
+            """ 
+                function for processing raw tables for mapping table - TransactionID_partial to AccID
+            """
+            df = pd.read_csv(self.silver_path["QBO"]["Raw"]/(df_type+".csv"), usecols = ["TransactionID", "AccID"])
+            df["TransactionID"] = df["TransactionID"].apply(lambda x: x.split("-")[1])
+            df = df.drop_duplicates()
+            df = df.rename(columns={"TransactionID":"TxnId"})
+            return df
+        ## purchase table for expense transactions
+        purchase = _process_facts("Purchase")
+        purchase["TxnType"] = "Expense"
+        mapping = pd.concat([mapping,purchase])
+        ## journal entries - exclude most entries related to bank
+        journal = _process_facts("JournalEntry")
+        journal["TxnType"] = "Journal Entry"
+        # for journal entries, exclude most of entires where the activity account ID is a bank ID
+        exclude_list = list(account_bank.AccID.unique())
+        # mylist = ["MFL51", "MFBC470", "MFBC471", "MFL28", "MFL27", "MFL1150040024"]
+        mylist = ["MFBC470", "MFBC471"] # should include these accounts
+        for acc in mylist:
+            exclude_list.remove(acc)
+        journal = journal[~journal["AccID"].isin(exclude_list)]
+        mapping = pd.concat([mapping,journal])
+        ## deposit
+        deposit = _process_facts("Deposit")
+        deposit["TxnType"] = "Deposit"
+        mapping = pd.concat([mapping,deposit])
+        ## salesreceipts
+        sales = _process_facts("SalesReceipt")
+        sales["TxnType"] = "Sales Receipt"
+        mapping = pd.concat([mapping,sales])
+        # process mapping table - dedup
+        mapping = mapping.drop_duplicates(subset=["TxnId"],keep="first")
+        ## load GL transacitons
+        cols = ["TransactionType","TransactionID_partial","AccID","AccNum","AccName", "TransactionDate", "Amount", "SplitAcc", "SplitAccID", "Memo", "Corp", "Balance"]
+        transactions = pd.read_csv(self.silver_path["QBO"]["GL"]/"GeneralLedger.csv",dtype={"TransactionID_partial":str}, usecols=cols)
+        transactions = transactions[transactions["AccID"].isin(account_bank.AccID.unique())]
+        transactions["TransactionDate"] = pd.to_datetime(transactions["TransactionDate"])
+        transactions = transactions[transactions["TransactionDate"]>=dt.datetime(year, month, 1)]
+        transactions = transactions.rename(columns={"TransactionType":"TxnType","TransactionID_partial":"TxnId",
+                                                    "AccID":"BankAccID","AccNum":"BankAccNum","AccName":"BankAccName",
+                                                    "TransactionDate":"BankActivityDate","Amount":"BankAmount"})
+        # merge to get CurrencyID for bank_acc
+        transactions = pd.merge(transactions, account_bank.loc[:,["AccID","CurrencyID"]], left_on=["BankAccID"], right_on=["AccID"], how="left")
+        transactions = transactions.drop(columns=["AccID"])
+        # separating transfers - don't merge with mapping table
+        transfers = transactions[transactions["TxnType"] == "Transfer"].copy(deep=True)
+        transactions = transactions[transactions["TxnType"]!="Transfer"]
+        transactions = transactions.drop(columns=["SplitAcc", "SplitAccID"])
+        transactions["BankActivityDate"] = pd.to_datetime(transactions["BankActivityDate"])
+        transactions["TxnType"] = transactions["TxnType"].replace({"Cheque Expense":"Expense", "Check": "Expense"})
+        # merge with mapping table
+        transactions_mapped = pd.merge(transactions,mapping,on=["TxnId","TxnType"],how="left")
+        non_match = transactions_mapped[transactions_mapped["AccID"].isna()]
+        print("None Match Transaction Types")
+        print(non_match.TxnType.value_counts())
+        print(f"Non matches - {len(non_match)}")
+        # function to determine transfer type
+        def _determine_transfer_type(entry:str) -> str:
+            """ 
+                determine whether the transfer is for visa, bank, or other transfer
+            """
+            if "visa" in entry.lower():
+                return "Visa Payment"
+            elif "due" in entry.lower():
+                return "Bank Transfer"
+            else:
+                return "Other Transfer"
+        # allocate transfer type 
+        transfers["TransferType"] = transfers["SplitAcc"].apply(lambda x: _determine_transfer_type(x))
+        transfers = transfers.rename(columns={"SplitAccID":"AccID"})
+        transfers = transfers.drop(columns=["SplitAcc"])
+        transactions_mapped = pd.concat([transactions_mapped,transfers], ignore_index=True)
+        # clean up the dataframe
+        transactions_mapped = transactions_mapped.rename(columns={"CurrencyID":"BankCurrencyID"})
+        transactions_mapped = pd.merge(transactions_mapped, account.loc[:,["AccID","AccName","AccNum","Category","Profitem","CurrencyID"]], on="AccID", how="left")
+        transactions_mapped.loc[transactions_mapped["TransferType"]=="Bank Transfer","Category"] = "Bank Transfer"
+        transactions_mapped.loc[((transactions_mapped["BankAccNum"].str.startswith("MSL"))&(transactions_mapped["AccNum"]=="MSL120001")), "Category"] = "Seed Processing Revenue"
+        transactions_mapped = transactions_mapped.rename(columns={"AccNum":"ActivityAccNum", "AccName":"ActivityAccName"})
+        # csv from sharepoint is unstable, and produced unpredictable readings from Power BI
+        self.check_file(self.gold_path["weekly_banking"])
+        transactions_mapped.to_excel(self.gold_path["weekly_banking"]/"BankingActivity.xlsx", sheet_name="transactions", index=False)
+
+    def _finance_operational(self) -> None:
+        """ 
+            transform PL data into operational-ready
+                1. reclassify accounts
+                2. standardize location, classify pillar
+                3. revising signs
+        """
+        print("\nStarting Finance Operational Project Transformation\n")
+        # load data from silver space
+        data = pd.read_csv(self.silver_path["QBO"]["PL"]/"ProfitAndLoss.csv")
+        assert data.loc[0,"FXRate"] == data.FXRate.mean(), "different FXRate detected"
+        self.fx = data.loc[0,"FXRate"]
+        data["TransactionDate"] = pd.to_datetime(data["TransactionDate"])
+        data["FiscalYear"] = data.TransactionDate.apply(lambda x: x.year + 1 if x.month >= 11 else x.year)
+        # clean location
+        data = data.rename(columns={"Location":"LocationRaw"})
+        data["Location"] = data["LocationRaw"]
+        ## add location for seed operation
+        data.loc[data["Corp"]=="MSL","Location"] = "Seeds"
+        data.loc[data["Corp"]=="NexGen","Location"] = "NexGen"
+        data.loc[data["Corp"]=="MSUSA","Location"] = "Arizona (produce)" # count Seeds USA as AZ Produce
+        ## clean location
+        clean_location = {"Airdrie - Grain":"Airdrie", "Airdrie - Cattle":"Airdrie", "Airdrie - General":"Airdrie", "Airdrie":"Airdrie", 
+                        "Eddystone - Grain": "Eddystone (grain)", "Eddystone - Cattle": "Eddystone (cattle)", "Eddystone - General":"Eddystone (corporate)",
+                        "Outlook (JV)":"Outlook", "AZ Produce":"Arizona (produce)", "Corporate":"Arizona (corporate)", "BC Produce":"BritishColumbia (produce)",
+                        "Grain":"Arizona (grain)", "Cache/Fischer/Loon - DNU":"Legacy", "Ashcroft (CC, Fischer, Loon)":"Ashcroft", 
+                        "Outlook (Capital)":"Outlook", "Colorado (MF)":"Colorado", "Colorado (JV)":"Colorado", "Cattle - General":"BritishColumbia (corporate)",
+                        "Home (70 M, LF/W, 105 M)":"Home Ranch", "Diamond S (BR)":"Diamond S", "North Farm (deleted)":"Legacy"}
+        data["Location"] = data["Location"].replace(clean_location)
+        locations = self.locations["Produce"] + self.locations["Grain"] + self.locations["Cattle"] + self.locations["Others"] + self.locations["Seed"]
+        unaccounted_location = list(set(data["Location"].unique()) - set(locations))
+        print(f"location unaccounted for - {unaccounted_location}")
+        # classify pillar
+        data["Pillar"] = data.apply(lambda x: self._pillar_classification(x),axis=1)
+        # reorganize corp
+        ## MPUSA missing location = Arizona (produce)
+        data.loc[((data["Corp"] == "MPUSA")&(data["Location"].isna())), "Location"] = "Arizona (produce)"
+        data.loc[((data["Corp"] == "MPUSA")&(data["Location"] == "Arizona (produce)")), "Pillar"] = "Produce"
+        ## AZ Produce --> MPUSA
+        data.loc[data["Location"] == "Arizona (produce)", "Corp"] = "MPUSA"
+        ## move everything for AZ in 2025 to produce
+        data.loc[((data["FiscalYear"] >= 2025) & (data["Location"].str.contains("Arizona",case=False))),"Pillar"] = "Produce"
+        data.loc[((data["FiscalYear"] >= 2025) & (data["Location"].str.contains("Arizona",case=False))),"Location"] = "Arizona (produce)"
+        ## BC Produce --> MPL
+        data.loc[data["Location"] == "BritishColumbia (produce)", "Corp"] = "MPL"
+        ## Outlook --> MPL
+        data.loc[data["Location"]=="Outlook", "Corp"] = "MPL"
+        # Reclassify accounts for Operational Purpose
+        ## read & process operational classification
+        acc_operation = pd.read_csv(self.silver_path["QBO"]["Dimension"]/"Accounts Classification - Operation.csv", dtype={"Pillar": str, "IsGenric": str}, keep_default_na=False)
+        acc_operation = acc_operation.rename(columns={"Pillar":"AccPillar", "OperationProfiType":"OperationProfType"})
+        acc_operation["AccNum"] = acc_operation["AccountName"].apply(lambda x: x.split(" ")[0])
+        acc_operation["IsIntercompany"] = acc_operation["AccountName"].apply(lambda x: "Yes" if "intercompany" in x.lower() else "No")
+        ## classify commodity
+        acc_operation["Commodity"] = acc_operation.apply(lambda x: self._identify_product(x), axis=1)
+        self.operation_acc = acc_operation
+        acc_operation.to_csv(self.gold_path["finance_operational"]/"accounts_classified_operation.csv", index=False)
+        ## read accounts table and apply new classification
+        accounts = self.silver_acc
+        accounts1 = accounts[accounts["AccNum"].isna()].copy(deep=True)
+        accounts = accounts[accounts["AccNum"].notna()]
+        accounts = pd.merge(accounts, acc_operation.loc[:,["AccNum","OperationProfType","OperationCategory","OperationSubCategory","AccPillar","Commodity","IsGeneric","IsIntercompany"]],
+                            on = "AccNum", how = "left")
+        accounts = pd.concat([accounts,accounts1],ignore_index=True)
+        # Revising Signs according to Operational Classification
+        print("Revising Signs ...")
+        expense_accounts = accounts[(accounts["OperationCategory"] == "Expense") | (accounts["OperationCategory"] =="Inventory Consumption")]
+        data["AmountDisplay"] = data.apply(lambda x: -x["AmountCAD"] if x["AccID"] in expense_accounts.AccID.unique() else x["AmountCAD"], axis=1)
+        self.gold_pl = data
+        self.gold_acc = accounts
+        # save files
+        print("Saving ...")
+        self.check_file(self.gold_path["finance_operational"])
+        data.to_csv(self.gold_path["finance_operational"]/"PL.csv", index=False)
+        accounts.to_excel(self.gold_path["finance_operational"]/"Account_table.xlsx", sheet_name = "Account", index=False)
+        data.to_excel(self.gold_path["finance_operational"]/"PL.xlsx", sheet_name="Transactions", index=False)
+        self.pl_exist = True
+
+    def _process_pp(self, data:pd.DataFrame) -> pd.DataFrame:
+        """ 
+            This function takes original dataframe, apply the payperiod number classification based on transactions date, process payperiod columns, and return the new dataframe
+        """
+        # load payperiods
+        payperiods = pd.read_csv(self.gold_path["payroll"]/"Payperiods.csv")
+        payperiods["START"] = pd.to_datetime(payperiods["START"])
+        payperiods["END"] = pd.to_datetime(payperiods["END"])
+        payperiods = payperiods.loc[:,["PP","START","END","Cycle","FiscalYear"]]
+        def _determine_pp(entry:pd.Series, date_col:str = "TransactionDate") -> str:
+            """ 
+                This function determined which payperiod a transaction should be classified into, 
+                    starting from most recent payperiod, the algorithm uses period start date + drift to determine which payperiod a transaction should fall into
+                Assumptions:
+                    1. for outlook and az, each payperiod is shifted by 5 + 7 days forward
+                    2. for other location, each payperiod is shifted by 5 days forward
+            """
+            date = entry[date_col] 
+            if isinstance(entry["Location"],str):
+                location = entry["Location"].lower()
+            else:
+                location = "None"
+            if "outlook" in location or "az" in location or "arizona" in location:
+                date_diff = dt.timedelta(days=5+7)
+            else:
+                date_diff = dt.timedelta(days=5)
+            year = date.year 
+            month = date.month
+            # push back the most recent payperiod dates for older transactions to save compute
+            if month >= 11:
+                payperiods_subset = payperiods[payperiods["END"] <= dt.datetime(year+1,2,1)] 
+            else:  
+                payperiods_subset = payperiods[payperiods["END"] <= dt.datetime(year,month+2,1)]
+            for i in range(len(payperiods_subset)-1,-1,-1):
+                if date > (payperiods_subset.loc[i,"END"]+date_diff):
+                    return "Exceed Max PayPeriod"
+                if date >= (payperiods_subset.loc[i,"START"]+date_diff):
+                    return str(payperiods_subset.loc[i,"PP"]) + "-" + str(payperiods_subset.loc[i,"Cycle"]) + "-" + str(payperiods_subset.loc[i,"FiscalYear"])
+            return "Earlier than Min PayPeriod"
+        print("Allocating PPNum for transactions ...")
+        date_col = "TransactionDate" if "TransactionDate" in data.columns else "date"
+        data["PPNum"] = data.apply(lambda x: _determine_pp(x,date_col),axis=1)
+        data = data[data["PPNum"] != "Earlier than Min PayPeriod"].copy(deep=True).reset_index(drop=True) # eliminate earlier than min payperiod in the csv, note dates are shifted in the csv
+        data["Cycle"] = data["PPNum"].apply(lambda x: x.split("-")[1])
+        data["FiscalYear"] = data["PPNum"].apply(lambda x: int(x.split("-")[2]))
+        data["PPNum"] = data["PPNum"].apply(lambda x: x.split("-")[0])
+        data["PPName"] = data["PPNum"].apply(lambda x: "PP0" + x if int(x) < 10 else "PP" + x)
+        data["PPName"] = data["Cycle"].str.slice(2,) + "-" + data["PPName"]
+        return data
+
+    def _process_units(self) -> None:
+        """ 
+            this function read and process Unit files that contains unit numbers for each location
+        """
+        acres = pd.read_csv(self.gold_path["payroll"]/"Unit.csv",dtype={"Location":str, "Unit":float})
+        acres["Location"] = acres["Location"].str.strip()
+        doc_rename = {"Airdrie Grain": "Airdrie (grain)", "Aridrie Cattle (head days 365)":"Airdrie", "Arizona All":"Arizona (produce)",
+                    "BC Cattle (head days 365)":"BritishColumbia (cattle)", "BC Produce":"BritishColumbia (produce)", 
+                    "Box Elder":"Havre", "Eddystone Cattle (head days 365)":"Eddystone (cattle)", "Eddystone Grain":"Eddystone (grain)",
+                    "Monette Seeds CDN (avg met. ton)":"Seeds", "Monette Seeds USA":"Seeds USA", "NexGen (avg met. ton)":"NexGen",
+                    "Waldeck (head days 365)":"Waldeck", "Calderbank  (head days 365)":"Calderbank"}
+        acres["Location"] = acres["Location"].replace(doc_rename)
+        acres["Pillar"] = acres.apply(lambda x: self._pillar_classification(x),axis=1)
+        acres.to_csv(self.gold_path["payroll"]/"Unit_PowerBI.csv",index=False)
+
+    def _payroll_project(self) -> None: 
+        """ 
+            will run _finance_operational() first
+            output: details + cost per unit (units per location input sheet) + average cost per unit for FY
+        """
+        if not self.pl_exist:
+            self._finance_operational()
+        print("\nStarting Payroll Project Transformation\n")
+
+        # load and filter accounts for wages and contract labor
+        account = self.silver_acc[(self.silver_acc["Category"].isin(["Wages and benefits - direct","Wages and benefits - overhead"]) | (self.silver_acc["AccNum"].isin(["MFAZ595001","MFBC536030"])))] 
+        # load only with transaction date later than 2021-12-20, and without "Accrual" in the memo
+        data = self.gold_pl.copy(deep=True)
+        data = data[data["AccID"].isin(account.AccID.unique())]
+        data["TransactionDate"] = pd.to_datetime(data["TransactionDate"])
+        data = data[data["TransactionDate"]>=dt.datetime(2021,12,20)].reset_index(drop=True)
+        data = data[~data["Memo"].str.contains("Accrual",case=False,na=False)]
+        # allocating payperiods
+        data = self._process_pp(data=data)
+        # standardizing location
+        # data.loc[data["Location"]=="Airdrie (corporate)", "Pillar"] = "Cattle"                # deprecated
+        # data.loc[data["Location"]=="Airdrie (corporate)", "Location"] = "Airdrie (cattle)"    # deprecated
+        data.loc[data["Location"]=="Eddystone (corporate)", "Pillar"] = "Unclassified"
+        data.loc[data["Location"]=="Eddystone (corporate)", "Location"] = "Unassigned"
+        data.loc[data["Location"]=="Legacy", "Location"] = "Unassigned"
+        data.loc[(data["Location"].str.contains("corporate",case=False,na=False)&(data["Location"]!="BritishColumbia (corporate)")),"Location"] = "Corporate"
+        ## move BC ranches into BC Cattle
+        data.loc[(data["Location"].isin(self.bc_ranches)), "Location"] = "BritishColumbia (cattle)"
+        data.loc[data["Location"] == "BritishColumbia (cattle)", "Pillar"] = "Cattle"
+        # summarizing data
+        ## by Location per PP
+        data_summarized = pd.DataFrame(data.groupby(["Location","PPName","Pillar","FiscalYear","Cycle","PPNum"]).agg({"AmountDisplay":"sum"}).reset_index(drop=False))
+        assert len(data_summarized) == len(data.groupby(["Location","PPName"]).agg({"AmountDisplay":"sum"}).reset_index(drop=False)), "Duplicated value detected for per Location per PP calculation"
+        ## join acres data for CostPerUnit compute
+        print("Summarizing ...")
+        acres = pd.read_csv(self.gold_path["payroll"]/"Unit_PowerBI.csv",dtype={"Location":str, "Unit":float})
+        acres = acres.loc[:,["Location", "Unit"]]
+        print(f"Unaccounted location for Acres Doc: {set(acres.Location.unique()) - set(data_summarized.Location.unique())}")
+        data_summarized = pd.merge(data_summarized, acres, on="Location", how="left")
+        data_summarized["CostPerUnit"] = data_summarized["AmountDisplay"] / data_summarized["Unit"] * 26
+        data_summarized["Count"] = 1
+        ## by Location
+        data_summarized2 = data_summarized.groupby(by=["Location","FiscalYear","Pillar"]).agg({"CostPerUnit":"mean", "Count":"sum"}).reset_index(drop=False)
+        data_summarized2 = data_summarized2.rename(columns={"CostPerUnit":"Avg CostPerUnit"})
+        assert len(data_summarized2) == len(data_summarized.groupby(by=["Location","FiscalYear"]).agg({"CostPerUnit":"mean"})), "Duplicated value detected for per Location calculation"
+        ## by pillar
+        data_summarized3 = data_summarized2.groupby(by=["FiscalYear","Pillar"]).agg({"Avg CostPerUnit":"mean", "Count":"sum"}).reset_index(drop=False)
+        assert len(data_summarized3) == len(data_summarized.groupby(by=["Pillar","FiscalYear"]).agg({"CostPerUnit":"mean"})), "Duplicated value detected for per Pillar calculation"
+        # saving
+        print("Saving ...")
+        self.check_file(self.gold_path["payroll"])
+        data.to_excel(self.gold_path["payroll"]/"Payroll.xlsx", sheet_name="Payroll", index=False)
+        data_summarized.to_excel(self.gold_path["payroll"]/"PayrollSummarized.xlsx", sheet_name="PayrollSummarized", index=False)
+        data_summarized2.to_excel(self.gold_path["payroll"]/"PayrollSummarized2.xlsx", sheet_name="PayrollSummarized2", index=False)
+        data_summarized3.to_excel(self.gold_path["payroll"]/"PayrollSummarized3.xlsx", sheet_name="PayrollSummarized3", index=False)
+
+    def _QBOTime_project(self) -> None:
+        """ 
+            apply PP allocation to QBO Time data, clean locaiton, and join relevant info into one table
+        """
+        print("\nStarting QBO Time Project Transformation\n")
+        # read files
+        timesheets = pd.read_csv(self.silver_path["QBO"]["Time"]/"timesheets.csv")
+        jobcode = pd.read_csv(self.silver_path["QBO"]["Time"]/"jobcodes.csv")
+        users = pd.read_csv(self.silver_path["QBO"]["Time"]/"users.csv")
+        group = pd.read_csv(self.silver_path["QBO"]["Time"]/"group.csv")
+        print(f"Read {len(timesheets)} timesheet records, {len(jobcode)} jobcodes, {len(users)} users, {len(group)} groups")
+        timesheets_len, users_len = len(timesheets), len(users)
+        # clean up location in group table
+        ## Arizona - all produce
+        group.loc[((group["corp_short"]=="A")&(group["location_name"]=="Monette Farms AZ")), "Location"] = "Arizona (produce)"
+        group.loc[((group["corp_short"]=="A")&(group["location_name"]=="Monette Produce USA")), "Location"] = "Arizona (produce)"
+        group.loc[((group["corp_short"]=="A")&(group["location_name"]=="Monette Seeds USA")), "Location"] = "Arizona (produce)"
+        ## BC
+        group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="Ashcroft Ranch")), "Location"] = "Ashcroft"
+        group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="Cache/Fischer/Loon")), "Location"] = "Unassigned"
+        group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="Diamond S Ranch")), "Location"] = "Diamond S"
+        group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="Fraser River Ranch")), "Location"] = "Fraser River Ranch"
+        group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="Home Ranch (70 Mile, LF/W, BR)")), "Location"] = "Home Ranch"
+        group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="Moon Ranch")), "Location"] = "Moon Ranch"
+        group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="Produce")), "Location"] = "BritishColumbia (produce)"
+        group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="Wolf Ranch")), "Location"] = "Wolf Ranch"
+        group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="SAWP")), "Location"] = "Unassigned"
+        ## Outlook
+        group.loc[((group["corp_short"]=="O")), "Location"] = "Outlook"
+        ## others
+        group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="Airdrie")), "Location"] = "Airdrie"
+        group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="BC")), "Location"] = "Unassigned"
+        group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="Calderbank")), "Location"] = "Calderbank"
+        group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="Eddystone")), "Location"] = "Eddystone (unspecified)"
+        group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="Hafford")), "Location"] = "Hafford"
+        group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="Kamsack")), "Location"] = "Kamsack"
+        group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="MFUSA Billings")), "Location"] = "Billings"
+        group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="MFUSA Box Elder")), "Location"] = "Havre"
+        group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="Nexgen Seeds")), "Location"] = "NexGen"
+        group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="Prince Albert")), "Location"] = "Prince Albert"
+        group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="Raymore")), "Location"] = "Raymore"
+        group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="Regina")), "Location"] = "Regina"
+        group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="Russel Approvals")), "Location"] = "Unassigned"
+        group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="Seeds")), "Location"] = "Seeds"
+        group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="Swift Current")), "Location"] = "Swift Current"
+        group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="The Pas")), "Location"] = "The Pas"
+        group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="Waldeck")), "Location"] = "Waldeck"
+        unclassified = group[group["Location"].isna()].location_name.unique()
+        if len(unclassified) > 0: print(f"\nUnclassified location - {unclassified}\n")
+        # create another location column for general location where bc ranches are merged into one
+        group = group.rename(columns={"Location": "Location (detail)"})
+        group["Location"] = group["Location (detail)"]
+        group.loc[(group["Location (detail)"].isin(self.bc_ranches)), "Location"] = "BritishColumbia (cattle)"
+        # merge tables into one table
+        ## merge location into users
+        users = pd.merge(users, group.loc[:,["group_id", "location_name", "Location", "Location (detail)"]].drop_duplicates(), on="group_id", how="left")
+        ## merge users into timesheets
+        timesheets = pd.merge(timesheets,users.loc[:,["user_id", "group_id", "username", "full_name", "location_name","Location","Location (detail)"]], on="user_id", how="left")
+        ## merge job into timesheets
+        timesheets = pd.merge(timesheets, jobcode.loc[:,["jobcode_id","job_name","type"]].rename(columns={"type":"job_type"}), on="jobcode_id", how="left")
+        assert (len(users) == users_len) and (len(timesheets) == timesheets_len), f"duplicated records found, timesheets - {timesheets_len} vs {len(timesheets)}; users - {users_len} vs {len(users)}"
+        # classify payperiods
+        timesheets["date"] = pd.to_datetime(timesheets["date"])
+        timesheets = self._process_pp(data=timesheets)
+        # summarizing data
+        ## by Location per PP 
+        summarized = timesheets.groupby(["Location","PPName","FiscalYear","Cycle","PPNum"]).agg({"duration":"sum"}).reset_index(drop=False)
+        assert len(summarized) == len(timesheets.groupby(["Location","PPName"]).agg({"duration":"sum"})), "duplicated value detected for timsheet per Location per PP summarization"
+        ## read units file
+        acres = pd.read_csv(self.gold_path["payroll"]/"Unit_PowerBI.csv",dtype={"Location":str, "Unit":float})
+        acres = acres.loc[:,["Location", "Unit"]]
+        addition = pd.DataFrame(data={"Location":["Billings"], "Unit":[acres[acres["Location"].isin(['Fly Creek', 'Camp 4'])].Unit.sum()]})
+        acres = pd.concat([acres,addition],ignore_index=True)
+        print(f"Unaccounted location for Acres Doc: {set(acres.Location.unique()) - set(summarized.Location.unique())}")
+        print(f"Unaccounted location for timesheets: {set(summarized.Location.unique()) - set(acres.Location.unique())}")
+        ## merge with units file
+        summarized = pd.merge(summarized, acres, on="Location", how="left")
+        ## calculate hours per unit
+        summarized["HoursPerUnit"] = summarized["duration"] / summarized["Unit"] * 26
+        summarized["Count"] = 1
+        # summarize per location
+        summarized2 = summarized.groupby(by=["Location","FiscalYear"]).agg({"HoursPerUnit":"mean", "Count":"sum"}).reset_index(drop=False)
+        summarized2 = summarized2.rename(columns={"HoursPerUnit":"Avg HoursPerUnit"})
+
+        # saving
+        print("Saving ...\n")
+        self.check_file(self.gold_path["QBOTime"])
+        timesheets.to_excel(self.gold_path["QBOTime"]/"QBOTime.xlsx", sheet_name = "QBOTime", index=False)
+        summarized.to_excel(self.gold_path["QBOTime"]/"QBOTimeSummarized.xlsx", sheet_name = "QBOTimeSummarized", index=False)
+        summarized2.to_excel(self.gold_path["QBOTime"]/"QBOTimeSummarized2.xlsx", sheet_name = "QBOTimeSummarized2", index=False)
+
+    def _temp_get_product(self, entry:str) -> str:
+        """ 
+            temporary function for aligning product classification with Traction for QBO accounts, will change for HP
+        """
+        entry = entry.lower()
+        if "durum" in entry:
+            return "Durum"
+        elif "wheat" in entry:
+            return "Wheat"
+        elif "canola" in entry:
+            return "Canola"
+        elif ("chickpea" in entry) or ("garbanzo bean" in entry):
+            return "Chickpeas"
+        elif ("peas" in entry) or ("field pea" in entry):
+            return "Peas"
+        elif "barley" in entry:
+            return "Barley"
+        elif "green lentil" in entry:
+            return "Green Lentils"
+        elif "red lentil" in entry:
+            return "Red Lentils"
+        elif "oats" in entry:
+            return "Oats"
+        elif "corn" in entry:
+            return "Corn"
+        else:
+            return "Others" 
+
+    def _raw_inventory(self) -> None:
+        """ 
+            prepare the data from raw QBO table for inventory project: only extracting partial Invoice, SalesReceipt, and Journal Entry
+        """
+        print("\nStarting Inventory Project Transformation ...\n")
+        corps = ["MFL", "MFUSA"]
+        cols = ["TransactionDate", "TransactionType", "TransactionID", "Corp", "Qty", "AccID", "FarmID", "CustomerID",
+                "DocNumber", "TransactionEntered", "Amount"]
+        journal_cols = [col for col in cols if col != "Qty"]
+        # read tables
+        print("Loading raw tables ...")
+        account = self.silver_acc.copy(deep=True)
+        account = account[account["Corp"].isin(corps)]
+        account = account[account["AccountType"] == "Income"]
+        farm = pd.read_csv(self.silver_path["QBO"]["Dimension_time"]/"Farm.csv")
+        farm = farm[farm["Corp"].isin(corps)]
+        customer = pd.read_csv(self.silver_path["QBO"]["Dimension_time"]/"Customer.csv")
+        customer = customer[customer["Corp"].isin(corps)]
+        first_date = dt.datetime(2023,11,1)
+        invoice = pd.read_csv(self.silver_path["QBO"]["Raw"]/"Invoice.csv")
+        invoice = invoice[invoice["Corp"].isin(corps)]
+        invoice["TransactionDate"] = pd.to_datetime(invoice["TransactionDate"])
+        invoice = invoice[invoice["TransactionDate"]>=first_date]
+        invoice = invoice[invoice["AccID"].isin(account.AccID.unique())]
+        sales = pd.read_csv(self.silver_path["QBO"]["Raw"]/"SalesReceipt.csv")
+        sales = sales[sales["Corp"].isin(corps)]
+        sales["TransactionDate"] = pd.to_datetime(sales["TransactionDate"])
+        sales = sales[sales["TransactionDate"]>=first_date]
+        sales = sales[sales["AccID"].isin(account.AccID.unique())]
+        journal = pd.read_csv(self.silver_path["QBO"]["Raw"]/"JournalEntry.csv",usecols=journal_cols)
+        journal = journal[journal["AccID"].isin(account.AccID.unique())]
+        journal["TransactionDate"] = pd.to_datetime(journal["TransactionDate"])
+        journal = journal[journal["TransactionDate"]>=first_date]
+        journal = journal[~journal["TransactionEntered"].str.contains("Delivered and not settled", na=False)]
+        journal = journal[~journal["TransactionEntered"].str.contains("Grain Inventory Receivable Adjustment", na=False)]
+        # combining tables
+        print("Combining Fact Tables ...")
+        invoice = invoice.loc[:,[col for col in cols if col in invoice.columns]]
+        sales = sales.loc[:,[col for col in cols if col in sales.columns]]
+        journal = journal.loc[:,[col for col in cols if col in journal.columns]]
+        facts = pd.concat([invoice, sales, journal], ignore_index=True)
+        del invoice, sales, journal
+        # join facts with dimension tables
+        facts = pd.merge(facts, account.loc[:,["AccID","AccNum","AccName","Category","Subcategory"]], on=["AccID"], how="left")
+        facts = pd.merge(facts, farm.loc[:,["FarmID","FarmName"]], on=["FarmID"], how="left")
+        facts = pd.merge(facts, customer.loc[:,["CustomerID","CustomerName"]], on=["CustomerID"], how="left")
+        facts = facts[facts["Subcategory"]=="Grain - cash settlements"]
+        print(f"Total Fact Entries - {len(facts)}")
+        # product column
+        facts["Product"] = facts["AccName"].apply(lambda x: self._temp_get_product(x))
+        # saving file
+        print("Saving Files ...")
+        self.check_file(self.gold_path["inventory"])
+        facts.to_excel(self.gold_path["inventory"]/"Excel"/"QBO_Grain_Settlements.xlsx", sheet_name="settlement", index=False)
+        print("Finished\n")
+
+    def _create_budget(self) -> None:
+        """ 
+            In Progress: this function generates budgets
+        """
+        if not self.pl_exist:
+            self._finance_operational()
+        inputdata_path = self.gold_path["budget"] / "Outside Data"
+        processed_path = self.gold_path["budget"] / "Processed Data"
+        rule_path = self.gold_path["budget"] / "Budget Rules"
+        # define helper function to process produce 
+        def _process_produce(budget_rules:pd.DataFrame,budget:pd.DataFrame,sheetname:str):
+            budget_rules = budget_rules[budget_rules["SheetRef"] == sheetname].copy(deep=True)
+            budget_rules["Commodity"] = budget_rules.apply(lambda x: self._identify_product(x,for_budget=True), axis=1)
+            budget["Type"] = budget["Type"].str.strip()
+            # gross income - by commodity
+            reference = budget[budget["Type"].isin(["Acres","Unit Price","YieldPerAc"])]
+            reference = reference.groupby(["Commodity","ProfitType","CommodityRaw"]).agg({"AmountCAD":"prod"}).reset_index(drop=False)
+            reference = reference.groupby(["Commodity"]).agg({"AmountCAD":"sum"}).reset_index(drop=False)
+            reference = reference.rename(columns={"AmountCAD":"TotalAmountCAD"})
+            reference["Category"] = "Produce - production"
+            if "outlook" in sheetname.lower():
+                for item in ["Prairie Pathways", "Market Garden / CSA"]:
+                    reference.loc[reference["Commodity"] == item, "Category"] = "Produce - cash settlements"
+            # seed expense - by commodity
+            expense = budget[budget["Type"] == "Seed"].copy(deep=True)
+            expense = expense.drop(columns="CommodityRaw")
+            expense = expense.groupby(["Commodity"]).agg({"AmountCAD":"sum"}).reset_index(drop=False).rename(columns={"AmountCAD":"TotalAmountCAD"})
+            expense["Category"] = "Seed"
+            # other expense - Fertilizer/Chemical - not by commodity
+            expense2 = budget[budget["Type"].isin(["Fertilizer","Chemical"])]
+            expense2 = expense2.groupby(["Type"]).agg({"AmountCAD":"sum"}).reset_index(drop=False).rename(columns={"AmountCAD":"TotalAmountCAD"})
+            expense2["Commodity"] = "Others"
+            expense2 = expense2.rename(columns={"Type":"Category"})
+            # combine
+            budget_produce = pd.merge(budget_rules, pd.concat([reference,expense, expense2]), on=["Commodity","Category"], how="left")
+            budget_produce = budget_produce.fillna(value={"TotalAmountCAD":0})
+            budget_produce["AmountCAD"] = budget_produce.apply(lambda x: eval(f"{x["TotalAmountCAD"]}{x["Formula"]}"),axis=1)
+            return budget_produce
+        # actuals
+        transactions = self.gold_pl.copy(deep=True)
+        transactions = transactions[transactions["FiscalYear"] >= 2024]
+        transactions["AccName"] = transactions["AccName"].str.strip()
+        transactions_location_rename = {"Calderbank":"Calderbank (cattle)"}
+        transactions["Location"] = transactions["Location"].replace(transactions_location_rename)
+        # processing input sheets data
+        ## commodity prices - everything is CAD except Winter Wheat is converted to USD
+        pricing = pd.read_csv(inputdata_path/"25-Grain-Pricing.csv")
+        pricing.loc[pricing["Commodity"]=="WW", "ForecastPrice"] *= self.fx
+        ## production budget
+        budget_production = pd.read_csv(inputdata_path/"25-Grain-Revenue.csv")
+        budget_production = budget_production.melt(
+            id_vars=["Location", "Currency", "Type"],
+            var_name="Commodity",
+            value_name = "Amount"
+        )
+        budget_production = budget_production.fillna(value = {"Amount": 0})
+        budget_production["Commodity"] = budget_production["Commodity"].replace({"Hay/Silage":"Hay"})
+        budget_production.loc[((budget_production["Location"]=="Airdrie")&(budget_production["Commodity"]=="Hay")), "Commodity"] = "Silage" # only Airdrie has silage, others have hay
+        budget_production_summary = pd.DataFrame(budget_production.groupby(["Location","Currency","Commodity"]).agg({"Amount": "prod"})).reset_index(drop=False)
+        budget_production_summary = budget_production_summary.rename(columns={"Amount":"TotalYield"})
+        ### merge yield with commodity price to calculate forecast production value of commodities
+        budget_production_summary = pd.merge(budget_production_summary,pricing,on=["Commodity"], how="left")
+        ### manual adjustments to prices
+        budget_production_summary.loc[((budget_production_summary["Location"] == "Airdrie") & (budget_production_summary["Commodity"] == "Hay")), "ForecastPrice"] = 85
+        budget_production_summary.loc[((budget_production_summary["Location"] == "Colorado (Genoa)") & (budget_production_summary["Commodity"] == "WW")), "ForecastPrice"] = 13.75
+        budget_production_summary.loc[budget_production_summary["Location"] == "Yorkton", "ForecastPrice"] *= 2/3
+        budget_production_summary["ForecastProductionCAD"] = budget_production_summary["TotalYield"] * budget_production_summary["ForecastPrice"]
+        budget_production_summary = budget_production_summary[budget_production_summary["ForecastProductionCAD"].notna()]
+        budget_production_summary = budget_production_summary[budget_production_summary["ForecastProductionCAD"]!=0]
+        ### convert prices back to USD for a adjusted column
+        budget_production_summary["ForecastProductionAdj"] = budget_production_summary.apply(lambda x: x["ForecastProductionCAD"] / self.fx if x["Currency"] == "USD" else x["ForecastProductionCAD"],axis=1)
+        ### save production budget
+        budget_production_summary.to_csv(processed_path/"budget_production.csv",index=False)
+        ## input budget
+        input_budget = pd.read_csv(inputdata_path/"25-Input-Budget.csv")
+        input_budget = input_budget.drop(columns=["Total acres"])
+        input_budget = input_budget.melt(
+            id_vars = ["Location", "Type"],
+            var_name = "Commodity",
+            value_name = "Amount"
+        )
+        input_budget = input_budget.fillna(value = {"Amount": 0})
+        input_budget.loc[((input_budget["Location"]=="Yorkton")&(input_budget["Type"].isin(["Fertilizer","Chemical","Seed"]))), "Amount"] *= 2/3
+        input_budget.to_csv(processed_path/"input_budget.csv",index=False)
+        ## labour budget
+        labour_budget = pd.read_csv(inputdata_path/"25-Labour-Budget.csv")
+        labour_budget = labour_budget.melt(
+            id_vars = ["Location","Currency"],
+            var_name = "Month",
+            value_name = "LabourBudgetCAD"
+        )
+        labour_budget["LabourBudgetAdj"] = labour_budget.apply(lambda x: x["LabourBudgetCAD"]/fx if x["Currency"]=="USD" else x["LabourBudgetCAD"], axis=1)
+        labour_budget.to_csv(processed_path/"labour_budget.csv",index=False)
+        ## outlook budget
+        outlook = pd.read_csv(inputdata_path/"25-Outlook-Detail.csv")
+        outlook = outlook.melt(
+            id_vars=["Type", "ProfitType"],
+            var_name="Commodity",
+            value_name="Amount"
+        )
+        outlook = outlook.fillna(value={"Amount": 0})
+        outlook.to_csv(processed_path/"outlook_budget.csv", index=False)
+        ## AZ budget
+        
+
+
+
+            
+
+    def _budget_update(self) -> None:
+        """ 
+            generate/update the actuals from the budget system
+        """
+        if not self.pl_exist:
+            self._finance_operational()
+        
+
+    def run(self) -> None:
+        start = perf_counter()
+
+        self._weekly_banking()
+        self._finance_operational()
+        self._process_units()
+        self._payroll_project()
+        self._QBOTime_project()
+        self._raw_inventory()
+
+        end = perf_counter()
+        print(f"\nProjects Transformation Finished with {(end-start)/60:.3f} minutes\n")
 
 
 

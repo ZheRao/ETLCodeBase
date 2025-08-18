@@ -10,8 +10,8 @@ def main():
     QBOTimeJob.run()
 
     # final transform
-    # projects = JobClasses.Projects()
-    # projects.run()
+    projects = JobClasses.Projects()
+    projects.run()
 
 if __name__ == "__main__":
     main()
