@@ -1107,7 +1107,7 @@ class Projects(Job):
         for project specific data transformations
     """
     
-    def __init__(self):
+    def __init__(self, focus_last_FY:bool = False):
         super().__init__()
         self.gold_path = {
             "weekly_banking": self.base_dir / "Gold" / "FinanceProject" / "WeeklyBanking",
@@ -1120,7 +1120,7 @@ class Projects(Job):
         self.silver_acc = pd.read_csv(self.silver_path["QBO"]["Dimension_time"]/"Account.csv")
         self.commodities = {
             "Produce": ["Strawberry", "Watermelon", "Cantaloupe", "Market Garden", "Broccoli", "Pumpkin", "Sweet Corn", "Cauliflower", "Squash", "Honeydew Melon", "Potato", "Carrot", "Cabbage",
-                        "Lettuce", "Brussel Sprouts", "Prairie Pathways", "Beet", "Corn Maze"],
+                        "Lettuce", "Brussel Sprouts", "Prairie Pathways", "Beet", "Corn Maze", "CSA"],
             "Grain": ["Blackeye Pea", "Winter Wheat", "Durum", "Cotton", "Chickpea", "Barley", "Green Lentil", "Red Lentil", "Canola", 
                         "Wheat","Field Pea", "Corn", "Oat", "Soybean", "Bean"],
             "Cattle": ["Weaned Calves", "Cull Bull", "Cull Cow", "Bred Heifer", "Purebred Yealing Bull", "Purebred Heifer", 
@@ -1136,6 +1136,8 @@ class Projects(Job):
         }
         self.bc_ranches = ["Ashcroft", "Fraser River Ranch", "Moon Ranch", "Wolf Ranch", "Home", "Diamond S", "BritishColumbia (corporate)","Home Ranch"]
         self.pl_exist = False # determines whether _financial_operational has run and gold_pl is stored in self, if not, any subsequent downstream projects will run _financial_operational first
+        self.currentFY = self.today.year if self.today.month<=10 else self.today.year + 1
+        if focus_last_FY: self.currentFY -= 1
 
     def _pillar_classification(self, entry: pd.Series) -> str:
         """ 
@@ -1169,9 +1171,10 @@ class Projects(Job):
             this function identifies commodity from account names, except for seed, 
                 if this function is called from budget project, it combines MG & CSA and take CM into consideration, and name forage differently
         """
-        if entry["AccPillar"] == "Seed":
-            return "SeedProduct"
-        accname = entry["AccountName"].lower()
+        if not for_budget:
+            if entry["AccPillar"] == "Seed":
+                return "SeedProduct"
+        accname = entry["AccountName"].lower() if not for_budget else entry["AccFull"].lower()
         if "float" in accname:
             return "Others"
         for x in self.commodities["Produce"] + self.commodities["Grain"] + self.commodities["Cattle"]:
@@ -1311,17 +1314,21 @@ class Projects(Job):
         print("\nStarting Finance Operational Project Transformation\n")
         # load data from silver space
         data = pd.read_csv(self.silver_path["QBO"]["PL"]/"ProfitAndLoss.csv")
-        assert data.loc[0,"FXRate"] == data.FXRate.mean(), "different FXRate detected"
+        assert len(data.FXRate.value_counts()) == 1, "different FXRate detected"
         self.fx = data.loc[0,"FXRate"]
         data["TransactionDate"] = pd.to_datetime(data["TransactionDate"])
         data["FiscalYear"] = data.TransactionDate.apply(lambda x: x.year + 1 if x.month >= 11 else x.year)
-        # clean location
-        data = data.rename(columns={"Location":"LocationRaw"})
-        data["Location"] = data["LocationRaw"]
+        # add month to the PL
+        data["Month"] = data["TransactionDate"].dt.month_name()
         ## add location for seed operation
         data.loc[data["Corp"]=="MSL","Location"] = "Seeds"
         data.loc[data["Corp"]=="NexGen","Location"] = "NexGen"
-        data.loc[data["Corp"]=="MSUSA","Location"] = "Arizona (produce)" # count Seeds USA as AZ Produce
+        data.loc[data["Corp"]=="MSUSA","Location"] = "Seeds USA"
+        # clean location
+        data = data.rename(columns={"Location":"LocationRaw"})
+        data["Location"] = data["LocationRaw"]
+        # switch seeds usa to AZ produce
+        data.loc[data["Corp"]=="MSUSA","Location"] = "Arizona (produce)"
         ## clean location
         clean_location = {"Airdrie - Grain":"Airdrie", "Airdrie - Cattle":"Airdrie", "Airdrie - General":"Airdrie", "Airdrie":"Airdrie", 
                         "Eddystone - Grain": "Eddystone (grain)", "Eddystone - Cattle": "Eddystone (cattle)", "Eddystone - General":"Eddystone (corporate)",
@@ -1675,51 +1682,10 @@ class Projects(Job):
         facts.to_excel(self.gold_path["inventory"]/"Excel"/"QBO_Grain_Settlements.xlsx", sheet_name="settlement", index=False)
         print("Finished\n")
 
-    def _create_budget(self) -> None:
+    def _buget_process_input(self, inputdata_path:Path, processed_path:Path) -> None:
         """ 
-            In Progress: this function generates budgets
+            this function processes and saves budget totals for production, input (chem/fert/seed), produce budgets, and JD Lease
         """
-        if not self.pl_exist:
-            self._finance_operational()
-        inputdata_path = self.gold_path["budget"] / "Outside Data"
-        processed_path = self.gold_path["budget"] / "Processed Data"
-        rule_path = self.gold_path["budget"] / "Budget Rules"
-        # define helper function to process produce 
-        def _process_produce(budget_rules:pd.DataFrame,budget:pd.DataFrame,sheetname:str):
-            budget_rules = budget_rules[budget_rules["SheetRef"] == sheetname].copy(deep=True)
-            budget_rules["Commodity"] = budget_rules.apply(lambda x: self._identify_product(x,for_budget=True), axis=1)
-            budget["Type"] = budget["Type"].str.strip()
-            # gross income - by commodity
-            reference = budget[budget["Type"].isin(["Acres","Unit Price","YieldPerAc"])]
-            reference = reference.groupby(["Commodity","ProfitType","CommodityRaw"]).agg({"AmountCAD":"prod"}).reset_index(drop=False)
-            reference = reference.groupby(["Commodity"]).agg({"AmountCAD":"sum"}).reset_index(drop=False)
-            reference = reference.rename(columns={"AmountCAD":"TotalAmountCAD"})
-            reference["Category"] = "Produce - production"
-            if "outlook" in sheetname.lower():
-                for item in ["Prairie Pathways", "Market Garden / CSA"]:
-                    reference.loc[reference["Commodity"] == item, "Category"] = "Produce - cash settlements"
-            # seed expense - by commodity
-            expense = budget[budget["Type"] == "Seed"].copy(deep=True)
-            expense = expense.drop(columns="CommodityRaw")
-            expense = expense.groupby(["Commodity"]).agg({"AmountCAD":"sum"}).reset_index(drop=False).rename(columns={"AmountCAD":"TotalAmountCAD"})
-            expense["Category"] = "Seed"
-            # other expense - Fertilizer/Chemical - not by commodity
-            expense2 = budget[budget["Type"].isin(["Fertilizer","Chemical"])]
-            expense2 = expense2.groupby(["Type"]).agg({"AmountCAD":"sum"}).reset_index(drop=False).rename(columns={"AmountCAD":"TotalAmountCAD"})
-            expense2["Commodity"] = "Others"
-            expense2 = expense2.rename(columns={"Type":"Category"})
-            # combine
-            budget_produce = pd.merge(budget_rules, pd.concat([reference,expense, expense2]), on=["Commodity","Category"], how="left")
-            budget_produce = budget_produce.fillna(value={"TotalAmountCAD":0})
-            budget_produce["AmountCAD"] = budget_produce.apply(lambda x: eval(f"{x["TotalAmountCAD"]}{x["Formula"]}"),axis=1)
-            return budget_produce
-        # actuals
-        transactions = self.gold_pl.copy(deep=True)
-        transactions = transactions[transactions["FiscalYear"] >= 2024]
-        transactions["AccName"] = transactions["AccName"].str.strip()
-        transactions_location_rename = {"Calderbank":"Calderbank (cattle)"}
-        transactions["Location"] = transactions["Location"].replace(transactions_location_rename)
-        # processing input sheets data
         ## commodity prices - everything is CAD except Winter Wheat is converted to USD
         pricing = pd.read_csv(inputdata_path/"25-Grain-Pricing.csv")
         pricing.loc[pricing["Commodity"]=="WW", "ForecastPrice"] *= self.fx
@@ -1766,7 +1732,7 @@ class Projects(Job):
             var_name = "Month",
             value_name = "LabourBudgetCAD"
         )
-        labour_budget["LabourBudgetAdj"] = labour_budget.apply(lambda x: x["LabourBudgetCAD"]/fx if x["Currency"]=="USD" else x["LabourBudgetCAD"], axis=1)
+        labour_budget["LabourBudgetAdj"] = labour_budget.apply(lambda x: x["LabourBudgetCAD"]/self.fx if x["Currency"]=="USD" else x["LabourBudgetCAD"], axis=1)
         labour_budget.to_csv(processed_path/"labour_budget.csv",index=False)
         ## outlook budget
         outlook = pd.read_csv(inputdata_path/"25-Outlook-Detail.csv")
@@ -1778,28 +1744,377 @@ class Projects(Job):
         outlook = outlook.fillna(value={"Amount": 0})
         outlook.to_csv(processed_path/"outlook_budget.csv", index=False)
         ## AZ budget
+        az = pd.read_csv(inputdata_path / "25-AZ-Detail.csv")
+        az = az.melt(
+            id_vars=["Type", "ProfitType"],
+            var_name="CommodityRaw",
+            value_name="AmountCAD"
+        )
+        az = az.fillna(value={"AmountCAD": 0})
+        az.to_csv(processed_path/"az_budget.csv", index=False)
+        ## BC produce details
+        bc = pd.read_csv(inputdata_path / "25-BC-Detail.csv")
+        bc = bc.melt(
+            id_vars=["Type", "ProfitType"],
+            var_name="CommodityRaw",
+            value_name="AmountCAD"
+        )
+        bc = bc.fillna(value={"AmountCAD": 0})
+        bc.to_csv(processed_path/"bc_budget.csv", index=False)
+        ## JD lease
+        jdlease = pd.read_csv(inputdata_path/"25-JD-Lease-Summary.csv")
+        jdlease = jdlease[jdlease["AllocatedCost25"] != 0]
+        jdlease.to_csv(processed_path/"JD_lease.csv", index=False)
+
+    def _budget_read_outsidedata(self,processed_path:Path) -> tuple[pd.DataFrame,pd.DataFrame,pd.DataFrame,pd.DataFrame,pd.DataFrame,pd.DataFrame,pd.DataFrame]:
+        """ 
+            this function reads all the processed outside data and standardize the commodity and location naming
+        """
+        production_budget = pd.read_csv(processed_path/"budget_production.csv")
+        input_budget = pd.read_csv(processed_path/"input_budget.csv")
+        labour_budget = pd.read_csv(processed_path/"labour_budget.csv")
+        outlook_budget = pd.read_csv(processed_path/"outlook_budget.csv")
+        jdlease = pd.read_csv(processed_path/"JD_lease.csv")
+        az_budget = pd.read_csv(processed_path/"az_budget.csv")
+        bc_budget = pd.read_csv(processed_path/"bc_budget.csv")
+        ## standardizing commodity naming
+        production_rename_commodity = {"R Lentils":"Red Lentil", "G Lentils":"Green Lentil","Chickpeas":"Chickpea","Peas":"Field Pea", "WW": "Winter Wheat"}
+        input_rename_commodity = {"R Lentils":"Red Lentil", "G Lentils":"Green Lentil","Chickpeas":"Chickpea", "WW": "Winter Wheat"}
+        outlook_rename_commodity = {"Broccoli-cases/ac":"Broccoli", "Cabbage-lbs/ac":"Cabbage", "Carrots-lbs":"Carrot", "Cauliflower-cases/ac":"Cauliflower",
+                                    "Table Potato-lbs":"Potato", "Seed Potato-lbs":"Potato", "Commercial Pumpkins-Bins/ac":"Pumpkin", "Strawberry Upick-lbs":"Strawberry",
+                                    "Pumpkin Upick-pieces/ac":"Pumpkin", "Corn Maze-lbs":"Prairie Pathways", "WW": "Winter Wheat", "Corn (Sweet) Cobs":"Sweet Corn"}
+        az_rename_commodity = {"Broccoli-cases/ac":"Broccoli", "Cabbage-lbs/ac":"Cabbage", "Pumpkins-Bins/ac":"Pumpkin", "WatermelonLG-bins/ac": "Watermelon",
+                            "WatermelonMini-cases/ac": "Watermelon"}
+        bc_rename_commodity = {"Broccoli-cases/ac":"Broccoli", "WatermelonLG-bins/ac": "Watermelon", "WatermelonMini-cases/ac": "Watermelon", "Pumpkins-Bins/ac":"Pumpkin",
+                            "Squash-lbs": "Squash"}
+        outlook_budget["CommodityRaw"] = outlook_budget["Commodity"]
+        production_budget["Commodity"] = production_budget["Commodity"].replace(production_rename_commodity)
+        input_budget["Commodity"] = input_budget["Commodity"].replace(input_rename_commodity)
+        outlook_budget["Commodity"] = outlook_budget["Commodity"].replace(outlook_rename_commodity)
+        az_budget["Commodity"] = az_budget["CommodityRaw"].replace(az_rename_commodity)
+        bc_budget["Commodity"] = bc_budget["CommodityRaw"].replace(bc_rename_commodity)
+        ## standardizing location naming - merge calderbank grain with Swift Current
+        jdlease_rename_location = {"Swift Current Total":"Swift Current", "Regina Farm":"Regina", "Calderbank":"Swift Current",
+                                "Airdrie":"Airdrie (grain)", "Eddystone":"Eddystone (grain)"}
+        labour_rename_location = {"NexGen (avg met. ton)":"NexGen", "Cache/Fisher/Look":"Aschroft", "MF AZ":"Arizona (produce)", "Box Elder":"Havre", 
+                                "BC Veg":"BritishColumbia (produce)","Monette Seeds CDN (avg met. ton)":"Monette Seeds", 
+                                "BC Cattle (avg head)":"BritishColumbia (cattle)", "Eddystone Cattle (avg head)":"Eddystone (cattle)",
+                                "Swift Current Cattle (avg head)":"Waldeck", "Aridrie Cattle (avg head)":"Airdrie (cattle)",
+                                "Airdrie Farm":"Airdrie (grain)", "Eddystone Farm":"Eddystone (grain)","Calderbank":"Calderbank (cattle)"}
+        input_rename_location =  {"Fly Creek/Camp 1":"Fly Creek", "Regina Farm":"Regina","Swift Current Total":"Swift Current", "Box Elder":"Havre", "Regina Farm":"Regina",
+                                "Calderbank":"Calderbank (grain)","Airdrie":"Airdrie (grain)", "Eddystone":"Eddystone (grain)"}
+        production_rename_location = {"Fly Creek/Camp 1":"Fly Creek", "Regina Farm":"Regina","Swift Current Total":"Swift Current", "Box Elder":"Havre", "Regina Farm":"Regina",
+                                    "Colorado (Genoa)":"Colorado", "Calderbank":"Swift Current","Airdrie":"Airdrie (grain)", "Eddystone":"Eddystone (grain)"}
+        input_budget["Location"] = input_budget["Location"].replace(input_rename_location)
+        production_budget["Location"] = production_budget["Location"].replace(production_rename_location)
+        labour_budget["Location"] = labour_budget["Location"].replace(labour_rename_location)
+        jdlease["Location"] = jdlease["Location"].replace(jdlease_rename_location)
+        ## put input budget (chem/fert/seed) into aggregated totals
+        input_budget2 = input_budget.groupby(["Location","Type"]).agg({"Amount":"sum"}).reset_index(drop=False)
+        ## aggregated totals for production budget and JD Lease
+        production_budget = pd.DataFrame(production_budget.groupby(["Location","Currency","Commodity","ForecastPrice"]).agg({"TotalYield":"sum", "ForecastProductionCAD":"sum", "ForecastProductionAdj":"sum"}).reset_index(drop=False))
+        jdlease = pd.DataFrame(jdlease.groupby(["Location","Country","Currency","TotalCost25"]).agg({"Acres25":"sum","AllocatedCost25":"sum"}).reset_index(drop=False))
+        return input_budget2, production_budget, labour_budget, jdlease, az_budget, bc_budget, outlook_budget
+
+    def _budget_process_produce(self, budget_rules:pd.DataFrame,budget:pd.DataFrame,sheetname:str) -> pd.DataFrame:
+        """ 
+            this function provides a standardized way to process produce budgets
+        """
+        budget_rules = budget_rules[budget_rules["SheetRef"] == sheetname].copy(deep=True)
+        budget_rules["Commodity"] = budget_rules.apply(lambda x: self._identify_product(x,for_budget=True), axis=1)
+        budget["Type"] = budget["Type"].str.strip()
+        # gross income - by commodity
+        reference = budget[budget["Type"].isin(["Acres","Unit Price","YieldPerAc"])]
+        reference = reference.groupby(["Commodity","ProfitType","CommodityRaw"]).agg({"AmountCAD":"prod"}).reset_index(drop=False)
+        reference = reference.groupby(["Commodity"]).agg({"AmountCAD":"sum"}).reset_index(drop=False)
+        reference = reference.rename(columns={"AmountCAD":"TotalAmountCAD"})
+        reference["Category"] = "Produce - production"
+        if "outlook" in sheetname.lower():
+            for item in ["Prairie Pathways", "Market Garden / CSA"]:
+                reference.loc[reference["Commodity"] == item, "Category"] = "Produce - cash settlements"
+        # seed expense - by commodity
+        expense = budget[budget["Type"] == "Seed"].copy(deep=True)
+        expense = expense.drop(columns="CommodityRaw")
+        expense = expense.groupby(["Commodity"]).agg({"AmountCAD":"sum"}).reset_index(drop=False).rename(columns={"AmountCAD":"TotalAmountCAD"})
+        expense["Category"] = "Seed"
+        # other expense - Fertilizer/Chemical - not by commodity
+        expense2 = budget[budget["Type"].isin(["Fertilizer","Chemical"])]
+        expense2 = expense2.groupby(["Type"]).agg({"AmountCAD":"sum"}).reset_index(drop=False).rename(columns={"AmountCAD":"TotalAmountCAD"})
+        expense2["Commodity"] = "Others"
+        expense2 = expense2.rename(columns={"Type":"Category"})
+        # combine
+        budget_produce = pd.merge(budget_rules, pd.concat([reference,expense, expense2]), on=["Commodity","Category"], how="left")
+        budget_produce = budget_produce.fillna(value={"TotalAmountCAD":0})
+        budget_produce["AmountCAD"] = budget_produce.apply(lambda x: eval(f"{x["TotalAmountCAD"]}{x["Formula"]}"),axis=1)
+        return budget_produce
+
+    def _budget_get_transactions(self) -> pd.DataFrame:
+        """ 
+            get actuals
+        """
+        transactions = self.gold_pl.copy(deep=True)
+        transactions = transactions[transactions["FiscalYear"] >= 2024]
+        transactions["AccName"] = transactions["AccName"].str.strip()
+        # transactions_location_rename = {"Calderbank":"Calderbank (cattle)"}
+        # transactions["Location"] = transactions["Location"].replace(transactions_location_rename)
+        return transactions
+
+
+    def _create_budget(self, process_input:bool = False) -> None:
+        """ 
+            In Progress: this function generates budgets
+        """
+        print("\nCreating Budget\n")
+        if not self.pl_exist:
+            self._finance_operational()
+        # self.gold_pl = pd.read_csv(self.gold_path["finance_operational"]/"PL.csv")
+        # self.fx = 1.3807
+        inputdata_path = self.gold_path["budget"] / "Outside Data"
+        processed_path = self.gold_path["budget"] / "Processed Data"
+        rule_path = self.gold_path["budget"] / "Budget Rules"
+        copied_path = self.gold_path["budget"]/"Copied Data"
+
+        # load actuals
+        transactions = self._budget_get_transactions()
         
+        # process outside data
+        if process_input:
+            self._buget_process_input(inputdata_path=inputdata_path, processed_path=processed_path)
+        
+        # read outside data
+        input_budget2, production_budget, labour_budget, jdlease, az_budget, bc_budget, outlook_budget = self._budget_read_outsidedata(processed_path=processed_path)
+
+        # calculate Budgets
+        ## outside data
+        ### read rules
+        budget_rules = pd.read_csv(rule_path/"OutsideData.csv")
+        budget_rename_category = {"Seed - farm":"Seed"}
+        budget_rules["Category"] = budget_rules["Category"].replace(budget_rename_category)
+        ### separate locations into individual rows when they are separated with + in the rules df
+        budget_rules["Location"] = budget_rules["Location"].str.split("+")
+        budget_rules = budget_rules.explode("Location").reset_index(drop=True)
+        ### extract formula
+        budget_rules = budget_rules.melt(
+            id_vars=["Location","Category","AccFull","SheetRef"],
+            var_name="Month",
+            value_name="Formula"
+        )
+        budget_rules = budget_rules.fillna(value={"Formula":"0"})
+        budget_rules["Formula"] = budget_rules["Formula"].astype(str)
+        budget_rules["Formula"] = budget_rules["Formula"].replace({"0": "*0"})
+        ### calculating input budget for accounts per location
+        budget_rules_input = budget_rules[budget_rules["SheetRef"] == "Input Budget"].copy(deep=True)
+        #### workaround input budget for Airdrie grain 
+        input_budget2.loc[((input_budget2["Location"]=="Airdrie (grain)")&(input_budget2["Type"]=="Acres")),"Type"] = "Custom work"
+        ### merge budget rules with budget total per location
+        budget_input = pd.merge(budget_rules_input,input_budget2.rename(columns={"Type":"Category","Amount":"TotalAmountCAD"}),on=["Location","Category"],how="left")
+        #### revert back from workaround
+        input_budget2.loc[((input_budget2["Location"]=="Airdrie (grain)")&(input_budget2["Type"]=="Custom work")),"Type"] = "Acres"
+        ### apply the formula to compute per month
+        budget_input["AmountCAD"] = budget_input.apply(lambda x: eval(f"{x["TotalAmountCAD"]}{x["Formula"]}"), axis=1)
+
+        ## production budget
+        ### combine Hay and Silage
+        production_budget["Commodity"] = production_budget["Commodity"].replace({"Hay":"Hay/Silage", "Silage":"Hay/Silage"})
+        ### add commodity column to budget rules
+        budget_rules_production = budget_rules[budget_rules["SheetRef"] == "Production Budget"].copy(deep=True)
+        budget_rules_production["Commodity"] = budget_rules_production.apply(lambda x: self._identify_product(x, for_budget=True), axis=1)
+        ### merge budget rules with budget totals
+        budget_production = pd.merge(budget_rules_production,production_budget.loc[:,["Location","Commodity","ForecastProductionCAD"]].rename(columns={"ForecastProductionCAD":"TotalAmountCAD"}),
+                                         on = ["Location", "Commodity"], how="left")
+        budget_production = budget_production.fillna(value={"TotalAmountCAD":0})
+        ### compute budget
+        budget_production["AmountCAD"] = budget_production.apply(lambda x: eval(f"{x["TotalAmountCAD"]}{x["Formula"]}"),axis=1)
+
+        ## labour budget
+        budget_rules_labour = budget_rules[budget_rules["SheetRef"] == "Labour Budget"].copy(deep=True)
+        budget_labour = pd.merge(budget_rules_labour, labour_budget.loc[:,["Location","Month","LabourBudgetCAD"]].rename(columns={"LabourBudgetCAD":"AmountCAD"}),
+                                    on=["Location","Month"],how="left")
+        
+        ## produce budgets
+        ### BC
+        budget_bc_produce = self._budget_process_produce(budget_rules=budget_rules,budget=bc_budget,sheetname="BC Produce Details")
+        ### AZ
+        budget_az_produce = self._budget_process_produce(budget_rules=budget_rules,budget=az_budget,sheetname="AZ Details")
+        ### outlook
+        budget_outlook = self._budget_process_produce(budget_rules=budget_rules,budget=outlook_budget.rename(columns={"Amount":"AmountCAD"}),sheetname="Outlook Details")
+
+        ## JD lease
+        budget_rules_jd = budget_rules[budget_rules["SheetRef"]=="JD Lease"].copy(deep=True)
+        budget_equipment = pd.merge(budget_rules_jd, jdlease.loc[:,["Location","AllocatedCost25"]].rename(columns={"AllocatedCost25":"TotalAmountCAD"}),
+                                        on = "Location", how = "left")
+        budget_equipment = budget_equipment.fillna(value={"TotalAmountCAD":0})
+        budget_equipment["AmountCAD"] = budget_equipment.apply(lambda x: eval(f"{x["TotalAmountCAD"]}{x["Formula"]}"),axis=1)
+
+        ## adjustment for Swift Current
+        months = ["April", "July"]
+        for month in months:
+            budget_input.loc[((budget_input["Location"]=="Swift Current")&(budget_input["Category"]=="Fertilizer")&(budget_input["Month"]==month)),"TotalAmountCAD"] += \
+            budget_input.loc[((budget_input["Location"]=="Calderbank (grain)")&(budget_input["Category"]=="Fertilizer")&(budget_input["Month"]==month)),"TotalAmountCAD"].item()
+            budget_input.loc[((budget_input["Location"]=="Swift Current")&(budget_input["Category"]=="Fertilizer")&(budget_input["Month"]==month)),"AmountCAD"] += \
+            budget_input.loc[((budget_input["Location"]=="Calderbank (grain)")&(budget_input["Category"]=="Fertilizer")&(budget_input["Month"]==month)),"AmountCAD"].item()
+        months = ["June", "September"]
+        for month in months:
+            budget_input.loc[((budget_input["Location"]=="Swift Current")&(budget_input["Category"]=="Chemical")&(budget_input["Month"]==month)),"TotalAmountCAD"] += \
+            budget_input.loc[((budget_input["Location"]=="Calderbank (grain)")&(budget_input["Category"]=="Chemical")&(budget_input["Month"]==month)),"TotalAmountCAD"].item()
+            budget_input.loc[((budget_input["Location"]=="Swift Current")&(budget_input["Category"]=="Chemical")&(budget_input["Month"]==month)),"AmountCAD"] += \
+            budget_input.loc[((budget_input["Location"]=="Calderbank (grain)")&(budget_input["Category"]=="Chemical")&(budget_input["Month"]==month)),"AmountCAD"].item()
+        months = ["May", "June", "September"]
+        for month in months:
+            budget_input.loc[((budget_input["Location"]=="Swift Current")&(budget_input["Category"]=="Seed")&(budget_input["Month"]==month)),"TotalAmountCAD"] += \
+            budget_input.loc[((budget_input["Location"]=="Calderbank (grain)")&(budget_input["Category"]=="Seed")&(budget_input["Month"]==month)),"TotalAmountCAD"].item()
+            budget_input.loc[((budget_input["Location"]=="Swift Current")&(budget_input["Category"]=="Seed")&(budget_input["Month"]==month)),"AmountCAD"] += \
+            budget_input.loc[((budget_input["Location"]=="Calderbank (grain)")&(budget_input["Category"]=="Seed")&(budget_input["Month"]==month)),"AmountCAD"].item()
+        
+        # arithmetic rules
+        arithmetic = pd.read_csv(rule_path/"Arithmetic.csv")
+        ## faltten location
+        arithmetic["Location"] = arithmetic["Location"].str.split("+")
+        arithmetic = arithmetic.explode("Location").reset_index(drop=True)
+        arithmetic_rules = arithmetic.melt(
+            id_vars=["Location","Category","AccFull", "AccRef", "FixedRef"],
+            var_name="Month",
+            value_name="FormulaFull"
+        )
+        ## housekeeping
+        arithmetic_rules = arithmetic_rules.fillna(value={"FormulaFull":"FY-1*0"})
+        arithmetic_rules["FormulaFull"] = arithmetic_rules["FormulaFull"].astype(str)
+        arithmetic_rules["FormulaFull"] = arithmetic_rules["FormulaFull"].replace({"0":"FY-1*0"})
+        arithmetic_rules["ReferenceYear"] = arithmetic_rules["FormulaFull"].str.slice(0,4)
+        arithmetic_rules["Formula"] = arithmetic_rules["FormulaFull"].str.slice(4)
+        arithmetic_rules = arithmetic_rules.fillna(value={"Formula": "0"})
+        arithmetic_rules["Formula"] = arithmetic_rules["Formula"].astype(str)
+        arithmetic_rules["Formula"] = arithmetic_rules["Formula"].replace({"0":"*0"})
+        ## separating Fixed records
+        arithmetic_rules_fixed = arithmetic_rules[arithmetic_rules["AccRef"] == "Fixed"].copy(deep=True)
+        arithmetic_rules = arithmetic_rules[arithmetic_rules["AccRef"]!="Fixed"].copy(deep=True)
+
+        ## process fixed records
+        arithmetic_rules_fixed = arithmetic_rules_fixed.drop(columns=["FormulaFull","ReferenceYear"]).rename(columns={"FixedRef":"TotalAmountCAD"})
+        arithmetic_rules_fixed["AmountCAD"] = arithmetic_rules_fixed.apply(lambda x: eval(f"{x["TotalAmountCAD"]}{x["Formula"]}"),axis=1)
+
+        ## Extract Account Info
+        arithmetic_rules["AccNum"] = arithmetic_rules["AccRef"].apply(lambda x: "".join(x.split(" ")[0:2]))
+        arithmetic_rules["AccName"] = arithmetic_rules["AccRef"].apply(lambda x: (" ".join(x.split(" ")[2:]).strip()))
+        assert "Fixd" not in arithmetic_rules.ReferenceYear.unique(), "Fixd records incorrectly classified"
+        ## separate FY-1 & FY+1
+        arithmetic_rules_prior = arithmetic_rules[arithmetic_rules["ReferenceYear"] == "FY-1"].copy(deep=True)
+        arithmetic_rules = arithmetic_rules[arithmetic_rules["ReferenceYear"] == "FY+1"].copy(deep=True)
+
+        ## process FY-1 with actuals
+        actuals = transactions.groupby(["Location", "AccNum", "AccName", "FiscalYear"]).agg({"AmountDisplay":"sum"}).reset_index(drop=False)
+        arithmetic_rules_prior["FiscalYear"] = self.currentFY - 1
+        assert len(actuals[actuals.duplicated(subset=["AccNum","FiscalYear","Location"],keep=False)]) == 0, "Duplicated AccNum detected for FY-1 Actuals"
+        budget_prior = pd.merge(arithmetic_rules_prior,actuals.rename(columns={"AmountDisplay":"TotalAmountCAD"}),
+                                on = ["Location","AccNum","FiscalYear"], how="left")
+        budget_prior = budget_prior.fillna(value={"TotalAmountCAD": 0})
+        budget_prior["AmountCAD"] = budget_prior.apply(lambda x: eval(f"{x["TotalAmountCAD"]}{x["Formula"]}"), axis=1)
+
+        ## processing FY+1 with current budget
+        ### budget sales that is based on production budget input sheet
+        arithmetic_rules_sales = arithmetic_rules[arithmetic_rules["Category"].str.contains("cash settlements")].copy(deep=True)
+        production_reference = pd.concat([budget_production.copy(deep=True), budget_outlook.copy(deep=True), budget_az_produce.copy(deep=True),budget_bc_produce.copy(deep=True)])
+        production_reference = production_reference.groupby(["Location","AccFull"]).agg({"AmountCAD":"sum"}).reset_index(drop=False)
+        budget_sales = pd.merge(arithmetic_rules_sales,production_reference.rename(columns={"AccFull":"AccRef"}), on=["Location","AccRef"], how="left")
+        budget_sales = budget_sales.rename(columns={"AmountCAD":"TotalAmountCAD"})
+        budget_sales["AmountCAD"] = budget_sales.apply(lambda x: eval(f"{x["TotalAmountCAD"]}{x["Formula"]}"),axis=1)
+        budget_prior = pd.concat([budget_prior, budget_sales],ignore_index=True)
+
+        ### budget inventory adjustment 
+        arithmetic_rules_inventory = arithmetic_rules[arithmetic_rules["Category"].str.contains("inventory adjustment",case=False)].copy(deep=True)
+        budget_inventory = pd.merge(arithmetic_rules_inventory, budget_prior.loc[:,["Location","AccFull","Month","AmountCAD"]].rename(columns={"AccFull":"AccRef"}),
+                                on = ["Location","AccRef", "Month"], how = "left")
+        budget_inventory["AmountCAD"] = -budget_inventory["AmountCAD"]
+        budget_prior = pd.concat([budget_prior, budget_inventory], ignore_index=True)
+
+        ## combine with fixed budgets
+        budget_prior = pd.concat([budget_prior,arithmetic_rules_fixed],ignore_index=True)
+
+        # copied data
+        budget_copy = pd.read_csv(copied_path/"Copied Data.csv")
+        budget_copy = budget_copy.melt(
+            id_vars=["Location","Category","AccFull"],
+            var_name = "Month",
+            value_name = "AmountCAD"
+        )
+        budget_copy = budget_copy.fillna(value={"AmountCAD":0})
+        budget_copy["AmountCAD"] = budget_copy["AmountCAD"].astype(float)
+        budget_copy["FiscalYear"] = self.currentFY
+        budget_copy["AccRef"] = "Copy"
+        budget_copy["ReferenceYear"] = "NA"
+        budget_copy["Formula"] = "NA"
+        budget_copy["TotalAmountCAD"] = budget_copy["AmountCAD"]
+        budget_copy.loc[budget_copy["Location"]=="Seeds USA", "AmountCAD"] *= self.fx
+
+        # combining all budgets
+        budget_outside = pd.concat([budget_input,budget_production,budget_labour,budget_equipment, budget_outlook, budget_az_produce, budget_bc_produce],ignore_index=True)
+        budget_outside = budget_outside.drop(columns=["Commodity"])
+        budget_prior = budget_prior.drop(columns=["FormulaFull","AccNum","AccName_x", "AccName_y", "AccName", "FixedRef"])
+        budget_all = pd.concat([budget_outside,budget_prior,budget_copy],ignore_index=True)
+        budget_all["AccNum"] = budget_all["AccFull"].apply(lambda x: "".join(x.split(" ")[0:2]))
+        budget_all["AccName"] = budget_all["AccFull"].apply(lambda x: " ".join(x.split(" ")[2:]))
+        budget_all["FiscalYear"] = self.currentFY 
+        budget_all["DataType"] = "Budget"
+        budget_all.loc[budget_all["Category"].str.contains("inventory adjustment",case=False), "AmountCAD"] *= -1 # turn the sign positive for inventory adjustments
+
+        # save
+        self.check_file(self.gold_path["budget"]/"OutputFile")
+        budget_all.to_csv(self.gold_path["budget"]/"OutputFile"/"budget_all.csv", index=False)
 
 
 
-            
-
-    def _budget_update(self) -> None:
+    def _budget_update(self, force_create:bool=False, force_process_input:bool=False) -> None:
         """ 
             generate/update the actuals from the budget system
         """
+        print("\nGenerating/Updating Actuals for budget system\n")
         if not self.pl_exist:
             self._finance_operational()
+        # self.gold_pl = pd.read_csv(self.gold_path["finance_operational"]/"PL.csv")
+        # self.fx = 1.3807
+        budget_path = self.gold_path["budget"]/"OutputFile"/"budget_all.csv"
+        if not Path.exists(budget_path) or force_create:
+            self._create_budget(process_input=force_process_input)
+        budget = pd.read_csv(budget_path)
+        budget = budget.loc[:,["Location", "SheetRef", "Month", "Formula", "TotalAmountCAD", "AmountCAD", "AccRef", "ReferenceYear","FiscalYear", "AccNum", "DataType", "Category"]]
+        budget_location_rename = {"Airdrie (grain)": "Airdrie", "Airdrie (cattle)": "Airdrie", "Calderbank (cattle)": "Calderbank",
+                                  "Airdrie (corporate)": "Airdrie", "Seeds USA":"Arizona (produce)"}
+        budget["Location"] = budget["Location"].replace(budget_location_rename)
+        category_mapping = budget.loc[:,["AccNum", "Category"]].drop_duplicates()
+        # organize Actuals
+        transactions = self._budget_get_transactions()
+        actuals_all = transactions.groupby(["Location","AccNum", "FiscalYear", "Month"]).agg({"AmountDisplay":"sum"}).reset_index(drop=False)
+        actuals_all = actuals_all[actuals_all["FiscalYear"] == self.currentFY]
+        actuals_all["DataType"] = "Actual"
+        actuals_all = actuals_all.rename(columns={"AmountDisplay": "AmountCAD"})
+        actuals_all = pd.merge(actuals_all,category_mapping,on="AccNum",how="left")
+        actuals_all.to_csv(self.gold_path["budget"]/"OutputFile"/"actuals_all.csv", index=False)
+        print(f"Location Unaccounted for in budget: {(set(budget.Location.unique()) - set(actuals_all.Location.unique()))}")
+        # combine everything
+        all_all = pd.concat([budget,actuals_all],ignore_index=True)
+        all_all["FXRate"] = self.fx
+        # operational classification
+        assert len(self.operation_acc[self.operation_acc.duplicated(subset=["AccNum"],keep=False)]) == 0, "Duplicated AccNum Detected - Operational Accounts Classification"
+        all_all = pd.merge(all_all, self.operation_acc, on="AccNum", how="left")
+        # classify pillars
+        all_all["Pillar"] = all_all.apply(lambda x: self._pillar_classification(x), axis=1)
+        # save
+        self.check_file(self.gold_path["budget"]/"OutputPowerBI")
+        all_all.to_excel(self.gold_path["budget"]/"OutputPowerBI"/"BudgetActual.xlsx", sheet_name="Budget", index=False)
+
+
+
         
 
-    def run(self) -> None:
+    def run(self, force_run_time:bool=False, force_create_budget:bool=False, force_process_budget_input:bool=False) -> None:
         start = perf_counter()
 
         self._weekly_banking()
         self._finance_operational()
         self._process_units()
         self._payroll_project()
-        self._QBOTime_project()
+        self._budget_update(force_create=force_create_budget, force_process_input=force_process_budget_input)
+        if force_run_time or (self.today.weekday()==0 or self.today.weekday() == 2): self._QBOTime_project()
         self._raw_inventory()
 
         end = perf_counter()
