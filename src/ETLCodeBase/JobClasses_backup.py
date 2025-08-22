@@ -1115,7 +1115,8 @@ class Projects(Job):
             "payroll": self.base_dir / "Gold" / "HRProject" /"PayrollProject",
             "finance_operational": self.base_dir / "Gold" / "FinanceOperationalProject",
             "budget": self.base_dir / "Gold" / "BudgetProject",
-            "QBOTime": self.base_dir / "Gold" / "HRProject" / "QBOTimeProject"
+            "QBOTime": self.base_dir / "Gold" / "HRProject" / "QBOTimeProject",
+            "hr_combined": self.base_dir / "Gold" / "HRProject" / "CombinedSummary"
         }
         self.silver_acc = pd.read_csv(self.silver_path["QBO"]["Dimension_time"]/"Account.csv")
         self.commodities = {
@@ -1155,7 +1156,7 @@ class Projects(Job):
         elif "corporate" in location:
             return "Unclassified"
         match location.lower():
-            case "hafford"|"kamsack"|"prince albert"|"raymore"|"regina"|"swift current"|"the pas"|"camp 4"|"fly creek"|"havre"|"yorkton"|"colorado":
+            case "hafford"|"kamsack"|"prince albert"|"raymore"|"regina"|"swift current"|"the pas"|"camp 4"|"fly creek"|"havre"|"yorkton"|"colorado"|"billings":
                 return "Grain"
             case "outlook"|"seeds usa":
                 return "Produce"
@@ -1388,7 +1389,8 @@ class Projects(Job):
 
     def _process_pp(self, data:pd.DataFrame) -> pd.DataFrame:
         """ 
-            This function takes original dataframe, apply the payperiod number classification based on transactions date, process payperiod columns, and return the new dataframe
+            This function takes original dataframe, apply the payperiod number classification based on transactions date, process payperiod columns, and return the new dataframe,
+                save the pp table for consolidated tables
         """
         # load payperiods
         payperiods = pd.read_csv(self.gold_path["payroll"]/"Payperiods.csv")
@@ -1434,6 +1436,7 @@ class Projects(Job):
         data["PPNum"] = data["PPNum"].apply(lambda x: x.split("-")[0])
         data["PPName"] = data["PPNum"].apply(lambda x: "PP0" + x if int(x) < 10 else "PP" + x)
         data["PPName"] = data["Cycle"].str.slice(2,) + "-" + data["PPName"]
+        data.loc[:,["PPName", "PPNum", "Cycle", "FiscalYear"]].drop_duplicates().to_csv(self.gold_path["payroll"].parent/ "OtherTables" / "PayPeriods.csv", index=False)
         return data
 
     def _process_units(self) -> None:
@@ -1449,13 +1452,14 @@ class Projects(Job):
                     "Waldeck (head days 365)":"Waldeck", "Calderbank  (head days 365)":"Calderbank"}
         acres["Location"] = acres["Location"].replace(doc_rename)
         acres["Pillar"] = acres.apply(lambda x: self._pillar_classification(x),axis=1)
-        acres.to_csv(self.gold_path["payroll"]/"Unit_PowerBI.csv",index=False)
+        acres.to_csv(self.gold_path["payroll"].parent/ "OtherTables" /"Unit_PowerBI.csv",index=False)
 
     def _payroll_project(self) -> None: 
         """ 
             will run _finance_operational() first
             output: details + cost per unit (units per location input sheet) + average cost per unit for FY
         """
+        self.check_file(self.gold_path["payroll"].parent/ "OtherTables")
         if not self.pl_exist:
             self._finance_operational()
         print("\nStarting Payroll Project Transformation\n")
@@ -1486,7 +1490,8 @@ class Projects(Job):
         assert len(data_summarized) == len(data.groupby(["Location","PPName"]).agg({"AmountDisplay":"sum"}).reset_index(drop=False)), "Duplicated value detected for per Location per PP calculation"
         ## join acres data for CostPerUnit compute
         print("Summarizing ...")
-        acres = pd.read_csv(self.gold_path["payroll"]/"Unit_PowerBI.csv",dtype={"Location":str, "Unit":float})
+        self._process_units()
+        acres = pd.read_csv(self.gold_path["payroll"].parent/ "OtherTables" /"Unit_PowerBI.csv",dtype={"Location":str, "Unit":float})
         acres = acres.loc[:,["Location", "Unit"]]
         print(f"Unaccounted location for Acres Doc: {set(acres.Location.unique()) - set(data_summarized.Location.unique())}")
         data_summarized = pd.merge(data_summarized, acres, on="Location", how="left")
@@ -1503,9 +1508,10 @@ class Projects(Job):
         print("Saving ...")
         self.check_file(self.gold_path["payroll"])
         data.to_excel(self.gold_path["payroll"]/"Payroll.xlsx", sheet_name="Payroll", index=False)
-        data_summarized.to_excel(self.gold_path["payroll"]/"PayrollSummarized.xlsx", sheet_name="PayrollSummarized", index=False)
-        data_summarized2.to_excel(self.gold_path["payroll"]/"PayrollSummarized2.xlsx", sheet_name="PayrollSummarized2", index=False)
-        data_summarized3.to_excel(self.gold_path["payroll"]/"PayrollSummarized3.xlsx", sheet_name="PayrollSummarized3", index=False)
+        self.check_file(self.gold_path["hr_combined"] / "CSV")
+        data_summarized.to_csv(self.gold_path["hr_combined"]/ "CSV" / "payroll_summarized1.csv", index=False)
+        data_summarized2.to_csv(self.gold_path["hr_combined"]/ "CSV" / "payroll_summarized2.csv", index=False)
+        data_summarized3.to_csv(self.gold_path["hr_combined"]/ "CSV" / "payroll_summarized3.csv", index=False)
 
     def _QBOTime_project(self) -> None:
         """ 
@@ -1526,14 +1532,16 @@ class Projects(Job):
         group.loc[((group["corp_short"]=="A")&(group["location_name"]=="Monette Seeds USA")), "Location"] = "Arizona (produce)"
         ## BC
         group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="Ashcroft Ranch")), "Location"] = "Ashcroft"
-        group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="Cache/Fischer/Loon")), "Location"] = "Unassigned"
+        group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="Cache/Fischer/Loon")), "Location"] = "BritishColumbia (cattle)"
+        group.loc[((group["corp_short"]=="BC")&(group["location_name"].str.contains("silage", case=False))), "Location"] = "BritishColumbia (cattle)"
         group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="Diamond S Ranch")), "Location"] = "Diamond S"
         group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="Fraser River Ranch")), "Location"] = "Fraser River Ranch"
         group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="Home Ranch (70 Mile, LF/W, BR)")), "Location"] = "Home Ranch"
         group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="Moon Ranch")), "Location"] = "Moon Ranch"
         group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="Produce")), "Location"] = "BritishColumbia (produce)"
         group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="Wolf Ranch")), "Location"] = "Wolf Ranch"
-        group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="SAWP")), "Location"] = "Unassigned"
+        group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="SAWP")), "Location"] = "BritishColumbia (produce)"
+        group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="SAWP Produce")), "Location"] = "BritishColumbia (produce)"
         ## Outlook
         group.loc[((group["corp_short"]=="O")), "Location"] = "Outlook"
         ## others
@@ -1571,12 +1579,17 @@ class Projects(Job):
         # classify payperiods
         timesheets["date"] = pd.to_datetime(timesheets["date"])
         timesheets = self._process_pp(data=timesheets)
+        # modify location for BC0
+        timesheets.loc[timesheets["user_id"] == "BC6107856", "Location"] = "Unassigned"
+        # classify pillars
+        timesheets["Pillar"] = timesheets.apply(lambda x: self._pillar_classification(x), axis=1)
+        timesheets.loc[timesheets["Pillar"] == "Missing", "Pillar"] = "Unclassified"
         # summarizing data
         ## by Location per PP 
-        summarized = timesheets.groupby(["Location","PPName","FiscalYear","Cycle","PPNum"]).agg({"duration":"sum"}).reset_index(drop=False)
+        summarized = timesheets.groupby(["Location","PPName","FiscalYear","Cycle","PPNum", "Pillar"]).agg({"duration":"sum"}).reset_index(drop=False)
         assert len(summarized) == len(timesheets.groupby(["Location","PPName"]).agg({"duration":"sum"})), "duplicated value detected for timsheet per Location per PP summarization"
         ## read units file
-        acres = pd.read_csv(self.gold_path["payroll"]/"Unit_PowerBI.csv",dtype={"Location":str, "Unit":float})
+        acres = pd.read_csv(self.gold_path["payroll"].parent/ "OtherTables" /"Unit_PowerBI.csv",dtype={"Location":str, "Unit":float})
         acres = acres.loc[:,["Location", "Unit"]]
         addition = pd.DataFrame(data={"Location":["Billings"], "Unit":[acres[acres["Location"].isin(['Fly Creek', 'Camp 4'])].Unit.sum()]})
         acres = pd.concat([acres,addition],ignore_index=True)
@@ -1588,15 +1601,40 @@ class Projects(Job):
         summarized["HoursPerUnit"] = summarized["duration"] / summarized["Unit"] * 26
         summarized["Count"] = 1
         # summarize per location
-        summarized2 = summarized.groupby(by=["Location","FiscalYear"]).agg({"HoursPerUnit":"mean", "Count":"sum"}).reset_index(drop=False)
+        summarized2 = summarized.groupby(by=["Location","FiscalYear", "Pillar"]).agg({"HoursPerUnit":"mean", "Count":"sum"}).reset_index(drop=False)
         summarized2 = summarized2.rename(columns={"HoursPerUnit":"Avg HoursPerUnit"})
+        assert len(summarized2) == len(timesheets.groupby(["Location","FiscalYear"]).agg({"duration":"sum"})), "duplicated value detected for timsheet per Location summarization"
+        # summarize per pillar
+        summarized3 = summarized2.groupby(by=["FiscalYear", "Pillar"]).agg({"Avg HoursPerUnit":"mean", "Count":"sum"}).reset_index(drop=False)
+        assert len(summarized3) == len(timesheets[timesheets["Pillar"]!="Missing"].groupby(["Pillar","FiscalYear"]).agg({"duration":"sum"})), "duplicated value detected for timsheet per Pillar summarization"
 
         # saving
         print("Saving ...\n")
         self.check_file(self.gold_path["QBOTime"])
         timesheets.to_excel(self.gold_path["QBOTime"]/"QBOTime.xlsx", sheet_name = "QBOTime", index=False)
-        summarized.to_excel(self.gold_path["QBOTime"]/"QBOTimeSummarized.xlsx", sheet_name = "QBOTimeSummarized", index=False)
-        summarized2.to_excel(self.gold_path["QBOTime"]/"QBOTimeSummarized2.xlsx", sheet_name = "QBOTimeSummarized2", index=False)
+        self.check_file(self.gold_path["hr_combined"]/ "CSV")
+        summarized.to_csv(self.gold_path["hr_combined"]/ "CSV" / "time_summarized1.csv", index=False)
+        summarized2.to_csv(self.gold_path["hr_combined"]/ "CSV" / "time_summarized2.csv", index=False)
+        summarized3.to_csv(self.gold_path["hr_combined"]/ "CSV" / "time_summarized3.csv", index=False)
+
+    def _hr_summary(self) -> None:
+        """ 
+            This function consolidate payroll and QBO time summaries into one table for consolidated insights
+        """
+        final_df = [pd.DataFrame(), pd.DataFrame(), pd.DataFrame()]
+        for i in [1, 2, 3]:
+            payroll = pd.read_csv(self.gold_path["hr_combined"] / "CSV" / f"payroll_summarized{i}.csv")
+            payroll_rename = {"AmountDisplay": "TotalAmount", "CostPerUnit": "AmountPerUnit", "Avg CostPerUnit": "Avg AmountPerUnit"}
+            payroll = payroll.rename(columns=payroll_rename)
+            payroll["Mode"] = "Payroll"
+            time = pd.read_csv(self.gold_path["hr_combined"] / "CSV" / f"time_summarized{i}.csv")
+            time_rename = {"duration": "TotalAmount", "HoursPerUnit": "AmountPerUnit", "Avg HoursPerUnit": "Avg AmountPerUnit"}
+            time = time.rename(columns=time_rename)
+            time["Mode"] = "Hours"
+            final_df[i-1] = pd.concat([payroll, time], ignore_index=True)
+        final_df[0].to_excel(self.gold_path["hr_combined"]/"Summarized.xlsx", sheet_name="Summarized", index=False)
+        final_df[1].to_excel(self.gold_path["hr_combined"]/"Summarized2.xlsx", sheet_name="Summarized2", index=False)
+        final_df[2].to_excel(self.gold_path["hr_combined"]/"Summarized3.xlsx", sheet_name="Summarized3", index=False)
 
     def _temp_get_product(self, entry:str) -> str:
         """ 
@@ -1859,7 +1897,6 @@ class Projects(Job):
         # transactions["Location"] = transactions["Location"].replace(transactions_location_rename)
         return transactions
 
-
     def _create_budget(self, process_input:bool = False) -> None:
         """ 
             In Progress: this function generates budgets
@@ -2061,8 +2098,6 @@ class Projects(Job):
         self.check_file(self.gold_path["budget"]/"OutputFile")
         budget_all.to_csv(self.gold_path["budget"]/"OutputFile"/"budget_all.csv", index=False)
 
-
-
     def _budget_update(self, force_create:bool=False, force_process_input:bool=False) -> None:
         """ 
             generate/update the actuals from the budget system
@@ -2102,19 +2137,15 @@ class Projects(Job):
         self.check_file(self.gold_path["budget"]/"OutputPowerBI")
         all_all.to_excel(self.gold_path["budget"]/"OutputPowerBI"/"BudgetActual.xlsx", sheet_name="Budget", index=False)
 
-
-
-        
-
     def run(self, force_run_time:bool=False, force_create_budget:bool=False, force_process_budget_input:bool=False) -> None:
         start = perf_counter()
 
         self._weekly_banking()
         self._finance_operational()
-        self._process_units()
         self._payroll_project()
         self._budget_update(force_create=force_create_budget, force_process_input=force_process_budget_input)
         if force_run_time or (self.today.weekday()==0 or self.today.weekday() == 2): self._QBOTime_project()
+        self._hr_summary()
         self._raw_inventory()
 
         end = perf_counter()
