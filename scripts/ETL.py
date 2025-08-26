@@ -7,7 +7,7 @@ def main():
     QBOjob.run(QBO_light=True, extract=True)
 
     QBOTimeJob = JobClasses.QBOTimeETL()
-    QBOTimeJob.run()
+    QBOTimeJob.run(force_run=False)
 
     # final transform
     # projects = JobClasses.Projects()
