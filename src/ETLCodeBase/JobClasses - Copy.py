@@ -13,6 +13,7 @@ import re
 import yaml
 from io import StringIO
 from bs4 import BeautifulSoup
+import time
 
 
 class Job:
@@ -29,7 +30,8 @@ class Job:
                 "Raw": base_dir/"Bronze"/"QBO"/"Raw"/f"{self.today.year}_{self.today.month}",
                 "GL": base_dir/"Bronze"/"QBO"/"GeneralLedger",
                 "PL": base_dir/"Bronze"/"QBO"/"ProfitAndLoss",
-                "Time":base_dir/"Bronze"/"QBOTime"
+                "Time":base_dir/"Bronze"/"QBOTime",
+                "APAR": base_dir/"Bronze"/"QBO"/"APAR"
             },
             "Delivery": {"Traction":base_dir/"Bronze"/"Traction", "HP":base_dir/"Bronze"/"HarvestProfit"},
             "Auth": {"QBO":base_dir/"Bronze"/"Authentication"/"QBO", "QBOTime": base_dir/"Bronze"/"Authentication"/"QBOTime",
@@ -43,11 +45,11 @@ class Job:
                 "Raw": base_dir/"Silver"/"QBO"/"Fact"/"Raw",
                 "PL": base_dir/"Silver"/"QBO"/"Fact"/"ProfitAndLoss",
                 "GL": base_dir/"Silver"/"QBO"/"Fact"/"GeneralLedger",
-                "Time": base_dir/"Silver"/"QBOTime"
+                "Time": base_dir/"Silver"/"QBOTime",
+                "APAR": base_dir/"Silver"/"QBO"/"Fact"/"APAR"
             },
             "Delivery": {"Traction":base_dir/"Silver"/"Traction", "HP":base_dir/"Silver"/"HarvestProfit"}
         }
-        self.conversion_mt_to_lb = 2204.62262185 
         
     
     def get_fx(self):
@@ -88,7 +90,7 @@ class QBOETL(Job):
         optionally run QBO API raw, GL, PL extraction and transformation
     """
 
-    def __init__(self):
+    def __init__(self, use_live_fx: bool=True): 
         super().__init__()
         self.names = ["Deposit","CreditMemo", "VendorCredit", "Invoice", "SalesReceipt", "Purchase", "Bill", "JournalEntry"]
         self.other_names = ["Account", "Customer", "Department", "Item", "Term", "Vendor", "Class", "Employee"]
@@ -96,7 +98,17 @@ class QBOETL(Job):
         self.GL_raw_cols = ["TransactionDate", "TransactionType", "DocNumber", "IsAdjust", "Name", "Memo", "SplitAcc", "Amount", "Balance"]
         self.acctype_QBO_expense = ["Expense","Cost of Goods Sold", "Other Expense"]
         self.profittype_cube_expense = ["Cost of Goods Sold", "Direct Operating Expenses", "Operating Overheads", "Other Expense"]
-        self.get_fx()
+        default_fx = 1.4018
+        if use_live_fx:
+            try:
+                self.get_fx()
+                print(f"FX - {self.fx}")
+            except:
+                print(f"cannot extract live FX rate, default to {default_fx}")
+                self.fx = default_fx
+        else:
+            print(f"not pulling live FX - rate - {default_fx}")
+            self.fx = default_fx
         
     
     # QBO Extraction methods
@@ -129,7 +141,7 @@ class QBOETL(Job):
         tokens[company]["refresh_token"] = auth_client.refresh_token 
         tokens[company]["realm_id"] = auth_client.realm_id 
         with open(self.raw_path["Auth"]["QBO"]/"tokens.json", "w") as f:
-            json.dump(tokens, f)
+            json.dump(tokens, f, indent=4)
         return auth_client 
 
     def _pull_raw(self, table_names: str, auth_client: AuthClient, company: str) -> None:
@@ -167,7 +179,7 @@ class QBOETL(Job):
             self.log.write(f"{name} - total records - {total_records}\n")
             if total_records != 0:
                 file_path = f"{path}/{name}.json"
-                with open(file_path, "w") as f:
+                with open(file_path, "w", encoding="utf-8", newline="\n") as f:
                     json.dump(data, f, indent=4)
 
     def _pull_reports(self, auth_client: AuthClient, company: str, light_load: bool=True, report_type: str="PL",
@@ -230,6 +242,35 @@ class QBOETL(Job):
             
             # advance start for next slice
             start = dt.date(end.year, end.month+1, 1) if year == end.year else dt.date(end.year+1, 1, 1)
+    
+    def _pull_APAR(self, auth_client: AuthClient, company:str, minor_version: int=75, report_type: str="AP") -> None:
+        """ 
+            This function pulls APAgingDetail report (for now), for all outstanding transactions
+        """
+        # ensure report type is entered correctly
+        report_type = report_type.upper()
+        assert report_type in ["AP", "AR"], f"please use 'AP' or 'AR' for report type, entered {report_type}"
+        # hypterparameters
+        params = {
+            "minorversion": minor_version,
+            "report_date": "-".join([str(self.today.year+1),str(self.today.month),str(self.today.day)])
+        }
+        REALM_ID, TOKEN, BASE_URL = auth_client.realm_id, auth_client.access_token, "https://quickbooks.api.intuit.com"
+        headers = {
+            "Authorization": f"Bearer {TOKEN}",
+            "Accept": "application/json"
+        }
+        report_name = "AgedPayableDetail" if report_type == "AP" else "AgedReceivableDetail"
+        # define path for storage
+        path_out = self.raw_path["QBO"]["APAR"] / report_name / str(self.today.year) / str(self.today.month) / company 
+        self.check_file(path_out)
+        # extract
+        resp = requests.get(f"{BASE_URL}/v3/company/{REALM_ID}/reports/{report_name}", headers=headers, params=params)
+        resp.raise_for_status()
+        results = resp.json()
+        with open(path_out/(str(self.today.day) + ".json"), "w") as f:
+            json.dump(results, f, indent=4)
+
 
     # QBO Raw Processing methods
     def _raw_get_lineitem(self, line: pd.Series):
@@ -274,7 +315,7 @@ class QBOETL(Job):
         maps = maps.rename(columns={"Current Name":"child", "Parent Dimension Member":"parent"})
         # recreate account:income statement:... structure for each account
         records = []
-        structure = ["Account"]
+        structure = ["Account", "Income Statement"]
         for i in range(1, len(maps)):
             # print()
             # print(i)
@@ -310,7 +351,11 @@ class QBOETL(Job):
         for i in range(len(df)):
             # extract account hierarchy list
             full_name = df.loc[i,"Account"]
+            # print(full_name)
             name_list = full_name.split(":")
+            # for irregular accounts classification from the finance team, skip, e.g., Account: MFBC 626080 Miscellaneous Insurance!!
+            if len(name_list) < 4:
+                continue
             # determine the last item in the hierarchy list is actually an account and it is part of the corps_list, otherwise ignore this entry
             fullname = name_list[-1]
             is_account, corp, accnum, accname = self._raw_split_name(fullname)
@@ -433,7 +478,7 @@ class QBOETL(Job):
             df["Line_Id"] = df["Line_Id"].astype(str)
             df["TransactionID"] = df_type[0] + "-" + df["Id"] + "-" + df["Line_Id"] # create a unique ID for each line item
             df["TransactionType"] = df_type
-            df = df.drop(columns=["Id", "Line_Id"])
+            df = df.rename(columns={"Id": "TransactionID_partial"})
             path = self.silver_path["QBO"]["Raw"]
             mode = "Fact"
         # dimensions
@@ -721,7 +766,7 @@ class QBOETL(Job):
         for name in self.company_names:
             print(f"Processing {name}...")
             self.log.write(f"\nProcessing {name}\n")
-            # determine the columns in raw report for the current company - PL only
+            # determine the columns in raw report for the current company - PL only ******* also APAR
             if report_type == "PL":
                 if name in ["MSUSA", "MSL"]: # these companies don't have Class column
                     report_columns = [x for x in self.PL_raw_cols if x != "Location"]        
@@ -798,10 +843,10 @@ class QBOETL(Job):
             records_all["TransactionType"] = records_all["TransactionType"].str.replace("Bill Payment (Check)", "BillPaymentCheck")
         # self.records_dev = records_all
         records_all["TransactionDate"] = pd.to_datetime(records_all["TransactionDate"])
-        records_all["AmountAdj"] = records_all.apply(lambda x: self._report_adjust_sign(x, target_col="AmountAdj"), axis=1)
-        records_all["AmountCAD"] = records_all.apply(lambda x: self._report_adjust_sign(x, target_col="AmountCAD"), axis=1)
+        records_all["AmountAdj"] = records_all.apply(lambda x: self._report_adjust_sign(x, target_col="AmountAdj"), axis=1) # can be improved, see _report_APAR_transform()
+        records_all["AmountCAD"] = records_all.apply(lambda x: self._report_adjust_sign(x, target_col="AmountCAD"), axis=1) # can be improved, see _report_APAR_transform()
         records_all["FXRate"] = self.fx
-        records_all["Country"] = records_all["Corp"].apply(lambda x: "USA" if x in self.us_companies else "Canada")
+        records_all["Country"] = records_all["Corp"].apply(lambda x: "USA" if x in self.us_companies else "Canada")  # can be improved, see _report_APAR_transform()
         self.log.write(f"\nAfter omitting Beginning Balance entries, Total length is {len(records_all)}\n")
         self.log.write(f"\nSpot USD/CAD ={self.fx}\n")
         self.log.write(f"\nFinished Processing all Files for {report_type}, Total Records {len(records_all)}\n\n")
@@ -813,7 +858,11 @@ class QBOETL(Job):
             if light_load, load df_old and perform merge
         """
         assert mode in ["PL", "GL"], "mode must be one of [PL, GL]" 
-        df_old = pd.read_csv(path_old)
+        if mode == "PL":
+            df_old = pd.read_csv(path_old,dtype={"Class":str, "ClassID":str})
+        else:
+            df_old = pd.read_csv(path_old)
+        
         assert ((list(set(df_old.columns)-set(df_new.columns))==[]) and (list(set(df_new.columns)-set(df_old.columns))==[])), \
                 f"{mode} new and old df columns don't match - old {df_old.columns} , new {df_new.columns}"
         df_old["TransactionDate"], df_new["TransactionDate"] = pd.to_datetime(df_old["TransactionDate"]), pd.to_datetime(df_new["TransactionDate"])
@@ -825,8 +874,108 @@ class QBOETL(Job):
         self.log.write(f"\n\nLoaded and merged old records for {mode}, total records - {len(df_new)}\n\n")
         return df_new
 
+    def _report_APAR_transform(self,report_type:str = "AP") -> None:
+        """ 
+            This function transforms Outstanding APAR reports from json raw format extracted from QBO API into dataframes
+        """
+        columns_full = ["Date", "TransactionType", "DocNumber", "Vendor", "Farm", "DueDate", "PastDue", "Amount", "OpenBalance"]
+        additional_columns = ["VendorID", "TransactionTypeID", "FarmID", "AmountCAD"]
+        all_columns = columns_full + additional_columns
+        dtypes = {"Date":str, "TransactionType":str, "DocNumber":str, "Vendor":str, "Farm":str, "DueDate":str, "PastDue":float, "Amount":float, "OpenBalance":float,
+                  "VendorID":str, "TransactionTypeID":str, "FarmID":str, "AmountCAD":float}
+        # ensure report type is entered correctly
+        report_type = report_type.upper()
+        assert report_type in ["AP", "AR"], f"please use 'AP' or 'AR' for report type, entered {report_type}"
+        report_name = "AgedPayableDetail" if report_type == "AP" else "AgedReceivableDetail"
+        df_final = pd.DataFrame()
+        folder = self.raw_path["QBO"]["APAR"] / report_name / str(self.today.year) / str(self.today.month)
+
+        print(f"\nBegin {report_name} Transformation ...")
+        self.log.write(f"\n\nBegin {report_name} Transformation \n\n")
+        
+        for company in self.company_names:
+            country = "USA" if company in self.us_companies else "Canada"
+            print(f"Processing {company}...")
+            self.log.write(f"\nProcessing {company}\n")
+            # load json file
+            path = folder / company
+            with open(path/f"{self.today.day}.json", "r") as f:
+                data = json.load(f)
+            # # record report date
+            # header = data["Header"]
+            # if header["Option"][0]["Name"] == "report_date":
+            #     report_day = header["Option"][0]["Value"]
+            # else:
+            #     report_day = header["Time"].split("T")[0]
+            if company in ["MSUSA", "MSL", "NexGen"]:
+                columns = [x for x in columns_full if x!= "Farm"]
+            else:
+                columns = columns_full
+            company_df = pd.DataFrame(columns=all_columns).astype(dtypes)
+            # inner layer 1: different APAR Categories, e.g., 1-30 days over due
+            row = data["Rows"]["Row"]
+            row = row[:-1]
+            for k in range(len(row)):
+                APCategory_df = pd.DataFrame(columns=all_columns).astype(dtypes)
+                ## record APAR Catetory
+                APCategory = row[k]["Header"]["ColData"][0]["value"]
+                ## inner layer 2: different entries for each category
+                rows = row[k]["Rows"]["Row"]
+                if len(rows) < 1:
+                    continue
+                for j in range(len(rows)):
+                    if rows[j]["type"] == "Data":
+                        entry = rows[j]["ColData"]
+                    else:
+                        continue 
+                    row_df = {}
+                    for i in range(len(entry)):
+                        # if column value contains ID, append company code and add ID
+                        if columns[i] == "Vendor":
+                            row_df.update({"VendorID": company + entry[i]["id"]})
+                        elif columns[i] == "TransactionType":
+                            row_df.update({"TransactionTypeID":company + entry[i]["id"]})
+                        elif columns[i] == "Farm":
+                            if company not in ["MSUSA", "MSL", "NexGen"]:
+                                row_df.update({"FarmID":company + entry[i]["id"]})
+                        # if it is DocNumber column, append campany code else, just append column value
+                        if columns[i] == "DocNumber":
+                            row_df.update({columns[i]:company + "-" + entry[i]["value"]})
+                        elif (columns[i] == "Farm") and (company not in ["MSUSA", "MSL", "NexGen"]):
+                            row_df.update({columns[i]: entry[i]["value"]})
+                        # convert numbers from string                            
+                        elif (columns[i] == "OpenBalance") or (columns[i] == "PastDue") or (columns[i] == "Amount"):
+                            amount = entry[i]["value"]
+                            amount = float(amount) if amount != "" else 0
+                            row_df.update({columns[i]: amount})
+                            if columns[i] == "Amount":
+                                amountCAD = amount * self.fx if country == "USA" else amount
+                                row_df.update({"AmountCAD": amountCAD})
+                        else:
+                            row_df.update({columns[i]: entry[i]["value"]})
+                    #print(row_df)
+                    APCategory_df.loc[len(APCategory_df)] = row_df
+                # append category if the dataframe is not empty
+                if len(APCategory_df) > 0:
+                    APCategory_df["APCategory"] = APCategory
+                    company_df = pd.concat([company_df,APCategory_df],ignore_index=True) 
+                else:
+                    print(f"Empty APCategory {APCategory} for {company}")
+            company_df["Corp"] = company 
+            company_df["Country"] = country
+            df_final = pd.concat([df_final, company_df], ignore_index=True)
+        
+        df_final["FXRate"] = self.fx
+        df_final["ReportDate"] = self.today
+        self.log.write(f"\nFinished Processing all Files for {report_name}, Total Records {len(df_final)}\n\n")
+        print(f"\nFinished Processing all Files for {report_name}, Total Records {len(df_final)}\n")
+        print("Saving ...")
+        path_out = self.silver_path["QBO"]["APAR"]/report_name/str(self.today.year)/str(self.today.month)
+        self.check_file(path_out)
+        df_final.to_csv(path_out/(str(self.today.day)+".csv"), index=False)
+
     # flow
-    def extract(self, load_raw: bool=True, load_pl: bool=True, light_load: bool=True, extract_only:list[str,None]=[]) -> None:
+    def extract(self, load_raw: bool=True, load_pl: bool=True, load_gl: bool=True, light_load: bool=True, extract_only:list[str,None]=[]) -> None:
         
         # extract QBO client secret
         with open(self.raw_path["Auth"]["QBO"]/"client_secrets.json", "r") as f:
@@ -840,39 +989,49 @@ class QBOETL(Job):
             self.log.write(f"\nExtracting {company}\n" + "Raw Summary\n")
             # refresh tokens
             auth_client = self._refresh_auth_client(company, secret)
+            # extract outstanding APAR reports
+            self._pull_APAR(auth_client=auth_client,company=company,report_type="AP")
             # extract GL - always for Weekly Banking Project
-            self._pull_reports(auth_client=auth_client,company=company,light_load=light_load,report_type="GL")
+            if load_gl: self._pull_reports(auth_client=auth_client,company=company,light_load=light_load,report_type="GL")
             # extract PL
-            if load_pl:
-                self._pull_reports(auth_client=auth_client,company=company,light_load=light_load,report_type="PL")
+            if load_pl: self._pull_reports(auth_client=auth_client,company=company,light_load=light_load,report_type="PL")
             # extract raw
-            if load_raw:
-                self._pull_raw(table_names=self.names+self.other_names, auth_client=auth_client, company=company)
+            if load_raw: self._pull_raw(table_names=self.names+self.other_names, auth_client=auth_client, company=company)
         print("Finished QBO Extraction ...")
         self.log.write("\nFinished QBO Extraction\n\n")
         
-    def transform(self, light_load:bool=True) -> None:
+    def transform(self, light_load:bool=True, process_raw:bool=True, process_gl:bool=True) -> None:
         print("\nStarting QBO Transformation ...")
         self.log.write("\nStart QBO Transformation\n")
         # QBO_Raw_Processing.py
-        self._raw_transform()
+        if process_raw: self._raw_transform()
         # read account table for PL, GL transformation
         self.account = pd.read_csv(self.silver_path["QBO"]["Dimension_time"]/"Account.csv")
         self.account_QBO_expense = self.account[self.account["AccountType"].isin(self.acctype_QBO_expense)].AccID.unique()
         # transform GL & PL 
         for mode in ["PL", "GL"]:
+            if not process_gl and (mode == "GL"):
+                continue
             path_old = (self.silver_path["QBO"]["PL"]/"ProfitAndLoss.csv") if mode == "PL" else (self.silver_path["QBO"]["GL"]/"GeneralLedger.csv")
             df_new = self._report_transform(report_type=mode,light_load=light_load)
             # if light load mode, load and merge with old records
             if light_load:
                 df_new = self._report_merge(mode=mode, df_new=df_new, path_old=path_old)
             df_new.to_csv(path_old, index=False)
+        # APAR transformation
+        self._report_APAR_transform(report_type="AP")
         print("Finished QBO Transformation ...")
         self.log.write("\nFinished QBO Transformation\n\n")
             
-    def run(self, QBO_light:bool=True, extract:bool=True, extract_only:list[str,None]=[]) -> None:
+    def run(self, QBO_light:bool=True, extract:bool=True, extract_only:list[str,None]=[], AP_only:bool = False, PL_only: bool=False) -> None:
         # measure time 
         start = perf_counter()
+        load_raw = load_gl = process_raw = process_gl = load_pl = True
+        if PL_only or AP_only:
+            load_raw = load_gl = False 
+            if AP_only:
+                load_pl = False
+            process_raw = process_gl = False
 
         # start logging
         self.create_log(path=self.raw_path["Log"])
@@ -880,10 +1039,10 @@ class QBOETL(Job):
         print("\nStart QBO Pipeline ...")
         
         # QBO Extracting
-        if extract: self.extract(light_load=QBO_light, extract_only=extract_only)
+        if extract: self.extract(light_load=QBO_light, extract_only=extract_only, load_raw=load_raw, load_gl=load_gl, load_pl=load_pl)
 
         # QBO Transformation
-        self.transform(light_load=QBO_light)
+        self.transform(light_load=QBO_light, process_raw=process_raw, process_gl=process_gl)
 
         end = perf_counter()
         self.log.write(f"\n\nQBO Pipeline Took {(end-start)/60:.3f} minutes\n\n" + "*****"*20 + "\n"*4)
@@ -1136,6 +1295,159 @@ class QBOTimeETL(Job):
             self.close_log()
         else:
             print(f"\n\nQBO Time Pipeline not scheduled to run today on - {self.today}\n\n")
+
+class HPETL(Job):
+    """ 
+        For extract and transform Harvest Profit Data
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.json_download_path = Path("c:/Users/ZheRao/OneDrive - Monette Farms/Desktop/Work Files/Projects/5 - HP Data")
+        # extract credentials locally 
+        with open(self.raw_path["Auth"]["Harvest Profit"]/"info.json", "r") as f:
+            self.credentials = json.load(f)
+        self.hp_locations = list(self.credentials["SwitchAcc"].keys())
+        self.BASE = "https://www.harvestprofit.com"
+
+    def _purge_folder(self) -> None:
+        """ 
+            This function will clear all files in the folder that is used to store emailed links
+                called before pipeline and after pipeline to ensure no duplicated download or errors in sending download requests
+        """
+        for json_path in os.listdir(self.json_download_path):
+            Path.unlink(self.json_download_path/json_path, missing_ok=True)
+
+    def _login(self) -> None:
+        """ 
+            this function performs login action for accessing the HP server
+        """
+        LOGIN_GET = f"{self.BASE}/users/sign_in"
+        def _extract_csrf_and_action(html: str):
+            """ 
+                this function extract information used for sign in from the sign in web page
+            """
+            soup = BeautifulSoup(html, "html.parser")
+            # auth token can appear as a hidden input or in a meta tag
+            token = None 
+            # find correct form in the login page to extract tokens and action for sending the login request
+            for form in soup.find_all("form"):
+                action = (form.get("action") or "")
+                if form.find("input", {"type": "password"}) or "/users/sign_in" in action:
+                    login_form = form
+                    break
+            if not login_form:
+                raise RuntimeError("Couldn't find the login form.")
+            token = (login_form.find("input", {"name": "authenticity_token"}) or {}).get("value")
+            if not token:
+                meta = soup.find("meta", {"name": "csrf-token"})
+                token = meta.get("content") if meta else None
+            if not token:
+                raise RuntimeError("Missing CSRF token.")
+            return token, action
+        # extract info from login page
+        login = self.s.get(LOGIN_GET)
+        login.raise_for_status()
+        # retrieve token and action for login request
+        token, action = _extract_csrf_and_action(login.text)
+        # conpose precise endpoint for login request
+        post_url = urljoin(self.BASE, action)
+        # gather information for log in
+        email = self.credentials["Credentials"]["email"]
+        passwrd = self.credentials["Credentials"]["password"]
+        # send login request
+        payload = {
+            "authenticity_token": token,
+            "user[email]": email,
+            "user[password]": passwrd
+        }
+        headers = {
+            "Origin": self.BASE,
+            "Referer": LOGIN_GET
+        }
+        login = self.s.post(post_url, data=payload, headers=headers, allow_redirects=True)
+        login.raise_for_status()
+        if login.status_code in ["200", 200]:
+            print("\nLogin Successful\n")
+    
+    def _send_request_for_email(self) -> None:
+        """ 
+            this function switches accounts to different locations, and send a GET request to HP server that triggers email containing actual data extraction link to be sent
+        """
+        for l in self.hp_locations:
+            # switch account 
+            print(f"activating {l}")
+            ACTIVATE = self.credentials["SwitchAcc"][l]
+            r = self.s.get(ACTIVATE, headers={"Referer": f"{self.BASE}/accounts"}, allow_redirects=True)
+            r.raise_for_status()
+            # get relevant information from updated load page for sending the request for email
+            soup = BeautifulSoup(r.text, features="lxml")
+            script = soup.find("script", {"class": "js-react-on-rails-component", "data-component-name": "Application", "type": "application/json"})
+            data = json.loads(script.text)
+            access_jwt, refresh_jwt = data.get("token"), data.get("refresh_token")
+            print(f"Page loaded for {data["entity"]["name"]}")
+            # sending the request for email containing data extraction link
+            url = f"{self.BASE}/api/v3/grain_inventory/loads/export_all"
+            year_ids = [y['id'] for y in data["years"]]
+            params = [("year_ids[]", str(y)) for y in year_ids]
+            LOADS_URL = "https://www.harvestprofit.com/78691/grain_inventory/loads"
+            headers = {
+                "Accept": "text/csv, application/json, text/plain, */*",
+                "Referer": LOADS_URL,
+                "authorization": access_jwt
+            }
+            resp = self.s.get(url,params = params, headers=headers)
+            resp.raise_for_status()
+    
+    def _extract_HP_data(self) -> None:
+        """ 
+            this function send GET request for actual data, extract and store the raw data, raw data is csv format
+        """
+        df_all = pd.DataFrame()
+        for json_path in os.listdir(self.json_download_path):
+            # open link file
+            with open(self.json_download_path/json_path, "r") as f:
+                link = json.load(f)
+            # send download request
+            r = self.s.get(link['url'])
+            # extract data from request results
+            df = pd.read_csv(
+                StringIO(r.text),       # treat the string like a file
+                skipinitialspace=True,  # trims the leading space in " Lbs"
+                parse_dates=['date'],   # pase the datetime column
+                date_format="%m/%d/%Y %I:%M %P",    # speeds up parsing for this format
+                dtype={'harvest_profit_id': 'Int64', 'crop_year': 'Int64'},
+                na_values=['']          # turn empty quotes into NaN
+            )
+            print(f"Processed - {df.loc[0,"entity_share"]}")
+            # append results 
+            df_all = pd.concat([df_all,df], ignore_index=True)
+        print(f"\nProcessed {len(df_all)} rows of data, saving ...")
+        df_all.to_csv(self.silver_path["Delivery"]["HP"]/f"Loads_{self.today.year}_{self.today.month}.csv", index=False)
+
+    def run(self):
+        start = perf_counter()
+
+        print("\nStarting Harvest Profit Data Extraction\n")
+        self._purge_folder()
+        self.s = requests.Session()
+        # login
+        self._login()
+        # trigger email
+        self._send_request_for_email()
+        # wait for the Power Automate to process all emails and extract links
+        time_waited = 60
+        time.sleep(60)
+        while len(os.listdir(self.json_download_path)) < 11:
+            time_waited += 10
+            time.sleep(10)
+        print(f"\nall links received and ready to send data extraction request, wait time - {np.round(time_waited/60,2)} minutes\n")
+        self._extract_HP_data()
+        self._purge_folder()
+        self.s.close()
+
+        end = perf_counter()
+        print(f"\nHP Extraction Finished with {(end-start)/60:.3f} minutes\n")
 
 
 # end of file

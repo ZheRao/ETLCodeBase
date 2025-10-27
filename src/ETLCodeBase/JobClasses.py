@@ -13,6 +13,7 @@ import re
 import yaml
 from io import StringIO
 from bs4 import BeautifulSoup
+import time
 
 
 class Job:
@@ -49,7 +50,6 @@ class Job:
             },
             "Delivery": {"Traction":base_dir/"Silver"/"Traction", "HP":base_dir/"Silver"/"HarvestProfit"}
         }
-        self.conversion_mt_to_lb = 2204.62262185 
         
     
     def get_fx(self):
@@ -98,7 +98,7 @@ class QBOETL(Job):
         self.GL_raw_cols = ["TransactionDate", "TransactionType", "DocNumber", "IsAdjust", "Name", "Memo", "SplitAcc", "Amount", "Balance"]
         self.acctype_QBO_expense = ["Expense","Cost of Goods Sold", "Other Expense"]
         self.profittype_cube_expense = ["Cost of Goods Sold", "Direct Operating Expenses", "Operating Overheads", "Other Expense"]
-        default_fx = 1.3931
+        default_fx = 1.4018
         if use_live_fx:
             try:
                 self.get_fx()
@@ -107,6 +107,7 @@ class QBOETL(Job):
                 print(f"cannot extract live FX rate, default to {default_fx}")
                 self.fx = default_fx
         else:
+            print(f"not pulling live FX - rate - {default_fx}")
             self.fx = default_fx
         
     
@@ -178,7 +179,7 @@ class QBOETL(Job):
             self.log.write(f"{name} - total records - {total_records}\n")
             if total_records != 0:
                 file_path = f"{path}/{name}.json"
-                with open(file_path, "w") as f:
+                with open(file_path, "w", encoding="utf-8", newline="\n") as f:
                     json.dump(data, f, indent=4)
 
     def _pull_reports(self, auth_client: AuthClient, company: str, light_load: bool=True, report_type: str="PL",
@@ -350,7 +351,11 @@ class QBOETL(Job):
         for i in range(len(df)):
             # extract account hierarchy list
             full_name = df.loc[i,"Account"]
+            # print(full_name)
             name_list = full_name.split(":")
+            # for irregular accounts classification from the finance team, skip, e.g., Account: MFBC 626080 Miscellaneous Insurance!!
+            if len(name_list) < 4:
+                continue
             # determine the last item in the hierarchy list is actually an account and it is part of the corps_list, otherwise ignore this entry
             fullname = name_list[-1]
             is_account, corp, accnum, accname = self._raw_split_name(fullname)
@@ -853,7 +858,11 @@ class QBOETL(Job):
             if light_load, load df_old and perform merge
         """
         assert mode in ["PL", "GL"], "mode must be one of [PL, GL]" 
-        df_old = pd.read_csv(path_old)
+        if mode == "PL":
+            df_old = pd.read_csv(path_old,dtype={"Class":str, "ClassID":str})
+        else:
+            df_old = pd.read_csv(path_old)
+        
         assert ((list(set(df_old.columns)-set(df_new.columns))==[]) and (list(set(df_new.columns)-set(df_old.columns))==[])), \
                 f"{mode} new and old df columns don't match - old {df_old.columns} , new {df_new.columns}"
         df_old["TransactionDate"], df_new["TransactionDate"] = pd.to_datetime(df_old["TransactionDate"]), pd.to_datetime(df_new["TransactionDate"])
@@ -1017,18 +1026,12 @@ class QBOETL(Job):
     def run(self, QBO_light:bool=True, extract:bool=True, extract_only:list[str,None]=[], AP_only:bool = False, PL_only: bool=False) -> None:
         # measure time 
         start = perf_counter()
-        load_raw = True 
-        load_gl = True 
-        process_raw = True 
-        process_gl = True
-        load_pl = True
+        load_raw = load_gl = process_raw = process_gl = load_pl = True
         if PL_only or AP_only:
-            load_raw = False 
-            load_gl = False
+            load_raw = load_gl = False 
             if AP_only:
                 load_pl = False
-            process_raw = False
-            process_gl = False
+            process_raw = process_gl = False
 
         # start logging
         self.create_log(path=self.raw_path["Log"])
@@ -1292,6 +1295,159 @@ class QBOTimeETL(Job):
             self.close_log()
         else:
             print(f"\n\nQBO Time Pipeline not scheduled to run today on - {self.today}\n\n")
+
+class HPETL(Job):
+    """ 
+        For extract and transform Harvest Profit Data
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.json_download_path = Path("c:/Users/ZheRao/OneDrive - Monette Farms/Desktop/Work Files/Projects/5 - HP Data")
+        # extract credentials locally 
+        with open(self.raw_path["Auth"]["Harvest Profit"]/"info.json", "r") as f:
+            self.credentials = json.load(f)
+        self.hp_locations = list(self.credentials["SwitchAcc"].keys())
+        self.BASE = "https://www.harvestprofit.com"
+
+    def _purge_folder(self) -> None:
+        """ 
+            This function will clear all files in the folder that is used to store emailed links
+                called before pipeline and after pipeline to ensure no duplicated download or errors in sending download requests
+        """
+        for json_path in os.listdir(self.json_download_path):
+            Path.unlink(self.json_download_path/json_path, missing_ok=True)
+
+    def _login(self) -> None:
+        """ 
+            this function performs login action for accessing the HP server
+        """
+        LOGIN_GET = f"{self.BASE}/users/sign_in"
+        def _extract_csrf_and_action(html: str):
+            """ 
+                this function extract information used for sign in from the sign in web page
+            """
+            soup = BeautifulSoup(html, "html.parser")
+            # auth token can appear as a hidden input or in a meta tag
+            token = None 
+            # find correct form in the login page to extract tokens and action for sending the login request
+            for form in soup.find_all("form"):
+                action = (form.get("action") or "")
+                if form.find("input", {"type": "password"}) or "/users/sign_in" in action:
+                    login_form = form
+                    break
+            if not login_form:
+                raise RuntimeError("Couldn't find the login form.")
+            token = (login_form.find("input", {"name": "authenticity_token"}) or {}).get("value")
+            if not token:
+                meta = soup.find("meta", {"name": "csrf-token"})
+                token = meta.get("content") if meta else None
+            if not token:
+                raise RuntimeError("Missing CSRF token.")
+            return token, action
+        # extract info from login page
+        login = self.s.get(LOGIN_GET)
+        login.raise_for_status()
+        # retrieve token and action for login request
+        token, action = _extract_csrf_and_action(login.text)
+        # conpose precise endpoint for login request
+        post_url = urljoin(self.BASE, action)
+        # gather information for log in
+        email = self.credentials["Credentials"]["email"]
+        passwrd = self.credentials["Credentials"]["password"]
+        # send login request
+        payload = {
+            "authenticity_token": token,
+            "user[email]": email,
+            "user[password]": passwrd
+        }
+        headers = {
+            "Origin": self.BASE,
+            "Referer": LOGIN_GET
+        }
+        login = self.s.post(post_url, data=payload, headers=headers, allow_redirects=True)
+        login.raise_for_status()
+        if login.status_code in ["200", 200]:
+            print("\nLogin Successful\n")
+    
+    def _send_request_for_email(self) -> None:
+        """ 
+            this function switches accounts to different locations, and send a GET request to HP server that triggers email containing actual data extraction link to be sent
+        """
+        for l in self.hp_locations:
+            # switch account 
+            print(f"activating {l}")
+            ACTIVATE = self.credentials["SwitchAcc"][l]
+            r = self.s.get(ACTIVATE, headers={"Referer": f"{self.BASE}/accounts"}, allow_redirects=True)
+            r.raise_for_status()
+            # get relevant information from updated load page for sending the request for email
+            soup = BeautifulSoup(r.text, features="lxml")
+            script = soup.find("script", {"class": "js-react-on-rails-component", "data-component-name": "Application", "type": "application/json"})
+            data = json.loads(script.text)
+            access_jwt, refresh_jwt = data.get("token"), data.get("refresh_token")
+            print(f"Page loaded for {data["entity"]["name"]}")
+            # sending the request for email containing data extraction link
+            url = f"{self.BASE}/api/v3/grain_inventory/loads/export_all"
+            year_ids = [y['id'] for y in data["years"]]
+            params = [("year_ids[]", str(y)) for y in year_ids]
+            LOADS_URL = "https://www.harvestprofit.com/78691/grain_inventory/loads"
+            headers = {
+                "Accept": "text/csv, application/json, text/plain, */*",
+                "Referer": LOADS_URL,
+                "authorization": access_jwt
+            }
+            resp = self.s.get(url,params = params, headers=headers)
+            resp.raise_for_status()
+    
+    def _extract_HP_data(self) -> None:
+        """ 
+            this function send GET request for actual data, extract and store the raw data, raw data is csv format
+        """
+        df_all = pd.DataFrame()
+        for json_path in os.listdir(self.json_download_path):
+            # open link file
+            with open(self.json_download_path/json_path, "r") as f:
+                link = json.load(f)
+            # send download request
+            r = self.s.get(link['url'])
+            # extract data from request results
+            df = pd.read_csv(
+                StringIO(r.text),       # treat the string like a file
+                skipinitialspace=True,  # trims the leading space in " Lbs"
+                parse_dates=['date'],   # pase the datetime column
+                date_format="%m/%d/%Y %I:%M %P",    # speeds up parsing for this format
+                dtype={'harvest_profit_id': 'Int64', 'crop_year': 'Int64'},
+                na_values=['']          # turn empty quotes into NaN
+            )
+            print(f"Processed - {df.loc[0,"entity_share"]}")
+            # append results 
+            df_all = pd.concat([df_all,df], ignore_index=True)
+        print(f"\nProcessed {len(df_all)} rows of data, saving ...")
+        df_all.to_csv(self.silver_path["Delivery"]["HP"]/f"Loads_{self.today.year}_{self.today.month}.csv", index=False)
+
+    def run(self):
+        start = perf_counter()
+
+        print("\nStarting Harvest Profit Data Extraction\n")
+        self._purge_folder()
+        self.s = requests.Session()
+        # login
+        self._login()
+        # trigger email
+        self._send_request_for_email()
+        # wait for the Power Automate to process all emails and extract links
+        time_waited = 60
+        time.sleep(60)
+        while len(os.listdir(self.json_download_path)) < 11:
+            time_waited += 10
+            time.sleep(10)
+        print(f"\nall links received and ready to send data extraction request, wait time - {np.round(time_waited/60,2)} minutes\n")
+        self._extract_HP_data()
+        self._purge_folder()
+        self.s.close()
+
+        end = perf_counter()
+        print(f"\nHP Extraction Finished with {(end-start)/60:.3f} minutes\n")
 
 
 # end of file
