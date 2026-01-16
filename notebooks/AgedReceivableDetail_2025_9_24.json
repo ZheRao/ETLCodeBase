@@ -1,0 +1,2310 @@
+{
+    "Header": {
+        "Time": "2025-09-24T07:16:06-07:00",
+        "ReportName": "AgedReceivableDetail",
+        "DateMacro": "today",
+        "StartPeriod": "2025-09-24",
+        "EndPeriod": "2025-09-24",
+        "Currency": "CAD",
+        "Option": [
+            {
+                "Name": "report_date",
+                "Value": "2025-09-24"
+            },
+            {
+                "Name": "NoReportData",
+                "Value": "false"
+            }
+        ]
+    },
+    "Columns": {
+        "Column": [
+            {
+                "ColTitle": "Date",
+                "ColType": "Date",
+                "MetaData": [
+                    {
+                        "Name": "ColKey",
+                        "Value": "tx_date"
+                    }
+                ]
+            },
+            {
+                "ColTitle": "Transaction Type",
+                "ColType": "String",
+                "MetaData": [
+                    {
+                        "Name": "ColKey",
+                        "Value": "txn_type"
+                    }
+                ]
+            },
+            {
+                "ColTitle": "#",
+                "ColType": "String",
+                "MetaData": [
+                    {
+                        "Name": "ColKey",
+                        "Value": "doc_num"
+                    }
+                ]
+            },
+            {
+                "ColTitle": "Customer",
+                "ColType": "String",
+                "MetaData": [
+                    {
+                        "Name": "ColKey",
+                        "Value": "cust_name"
+                    }
+                ]
+            },
+            {
+                "ColTitle": "Location",
+                "ColType": "String",
+                "MetaData": [
+                    {
+                        "Name": "ColKey",
+                        "Value": "dept_name"
+                    }
+                ]
+            },
+            {
+                "ColTitle": "Due Date",
+                "ColType": "Date",
+                "MetaData": [
+                    {
+                        "Name": "ColKey",
+                        "Value": "due_date"
+                    }
+                ]
+            },
+            {
+                "ColTitle": "Amount",
+                "ColType": "Money",
+                "MetaData": [
+                    {
+                        "Name": "ColKey",
+                        "Value": "subt_amount"
+                    }
+                ]
+            },
+            {
+                "ColTitle": "Open Balance",
+                "ColType": "Money",
+                "MetaData": [
+                    {
+                        "Name": "ColKey",
+                        "Value": "subt_open_bal"
+                    }
+                ]
+            }
+        ]
+    },
+    "Rows": {
+        "Row": [
+            {
+                "Header": {
+                    "ColData": [
+                        {
+                            "value": "91 or more days past due"
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        }
+                    ]
+                },
+                "Rows": {
+                    "Row": [
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2022-05-07"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "34780"
+                                },
+                                {
+                                    "value": "2021Sprayer"
+                                },
+                                {
+                                    "value": "Monette Ag Ventures Ltd.",
+                                    "id": "250"
+                                },
+                                {
+                                    "value": "Swift Current",
+                                    "id": "5"
+                                },
+                                {
+                                    "value": "2022-07-06"
+                                },
+                                {
+                                    "value": "60218.18"
+                                },
+                                {
+                                    "value": "60218.18"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2022-06-11"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "34781"
+                                },
+                                {
+                                    "value": "2021Tractor"
+                                },
+                                {
+                                    "value": "Monette Ag Ventures Ltd.",
+                                    "id": "250"
+                                },
+                                {
+                                    "value": "Swift Current",
+                                    "id": "5"
+                                },
+                                {
+                                    "value": "2022-08-10"
+                                },
+                                {
+                                    "value": "30135.08"
+                                },
+                                {
+                                    "value": "30135.08"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2023-10-11"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "50013"
+                                },
+                                {
+                                    "value": "JD Clothing Order"
+                                },
+                                {
+                                    "value": "Brandt Tractor",
+                                    "id": "3137"
+                                },
+                                {
+                                    "value": "Prince Albert",
+                                    "id": "2"
+                                },
+                                {
+                                    "value": "2023-10-11"
+                                },
+                                {
+                                    "value": "2612.51"
+                                },
+                                {
+                                    "value": "2612.51"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2023-10-11"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "50030"
+                                },
+                                {
+                                    "value": "JD Clothing Order"
+                                },
+                                {
+                                    "value": "Stotz Equipment",
+                                    "id": "3142"
+                                },
+                                {
+                                    "value": "-Corporate",
+                                    "id": "4"
+                                },
+                                {
+                                    "value": "2023-10-11"
+                                },
+                                {
+                                    "value": "4576.98"
+                                },
+                                {
+                                    "value": "4576.98"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2023-10-11"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "50028"
+                                },
+                                {
+                                    "value": "JD Clothing Order"
+                                },
+                                {
+                                    "value": "Prairie Coast Equipment.",
+                                    "id": "3141"
+                                },
+                                {
+                                    "value": "-Corporate",
+                                    "id": "4"
+                                },
+                                {
+                                    "value": "2023-10-11"
+                                },
+                                {
+                                    "value": "22997.79"
+                                },
+                                {
+                                    "value": "22997.79"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2024-03-31"
+                                },
+                                {
+                                    "value": "Journal Entry",
+                                    "id": "72250"
+                                },
+                                {
+                                    "value": "5787"
+                                },
+                                {
+                                    "value": "Purely Canada Foods",
+                                    "id": "2376"
+                                },
+                                {
+                                    "value": "",
+                                    "id": ""
+                                },
+                                {
+                                    "value": "2024-03-31"
+                                },
+                                {
+                                    "value": "3872182.24"
+                                },
+                                {
+                                    "value": "3872182.24"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2024-04-19"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "61311"
+                                },
+                                {
+                                    "value": "533"
+                                },
+                                {
+                                    "value": "Dorian Semchuk",
+                                    "id": "3655"
+                                },
+                                {
+                                    "value": "Prince Albert",
+                                    "id": "2"
+                                },
+                                {
+                                    "value": "2024-05-19"
+                                },
+                                {
+                                    "value": "12780.00"
+                                },
+                                {
+                                    "value": "4916.75"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2024-06-24"
+                                },
+                                {
+                                    "value": "Journal Entry",
+                                    "id": "67054"
+                                },
+                                {
+                                    "value": "5330"
+                                },
+                                {
+                                    "value": "Purely Canada Foods",
+                                    "id": "2376"
+                                },
+                                {
+                                    "value": "",
+                                    "id": ""
+                                },
+                                {
+                                    "value": "2024-06-24"
+                                },
+                                {
+                                    "value": "-600000.00"
+                                },
+                                {
+                                    "value": "-600000.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2024-07-17"
+                                },
+                                {
+                                    "value": "Journal Entry",
+                                    "id": "67956"
+                                },
+                                {
+                                    "value": "5395"
+                                },
+                                {
+                                    "value": "Purely Canada Foods",
+                                    "id": "2376"
+                                },
+                                {
+                                    "value": "",
+                                    "id": ""
+                                },
+                                {
+                                    "value": "2024-07-17"
+                                },
+                                {
+                                    "value": "-250000.00"
+                                },
+                                {
+                                    "value": "-250000.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2024-07-18"
+                                },
+                                {
+                                    "value": "Journal Entry",
+                                    "id": "68218"
+                                },
+                                {
+                                    "value": "5401"
+                                },
+                                {
+                                    "value": "Purely Canada Foods",
+                                    "id": "2376"
+                                },
+                                {
+                                    "value": "",
+                                    "id": ""
+                                },
+                                {
+                                    "value": "2024-07-18"
+                                },
+                                {
+                                    "value": "-100000.00"
+                                },
+                                {
+                                    "value": "-100000.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2024-07-26"
+                                },
+                                {
+                                    "value": "Journal Entry",
+                                    "id": "68593"
+                                },
+                                {
+                                    "value": "5426"
+                                },
+                                {
+                                    "value": "Purely Canada Foods",
+                                    "id": "2376"
+                                },
+                                {
+                                    "value": "",
+                                    "id": ""
+                                },
+                                {
+                                    "value": "2024-07-26"
+                                },
+                                {
+                                    "value": "-200000.00"
+                                },
+                                {
+                                    "value": "-200000.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2024-08-02"
+                                },
+                                {
+                                    "value": "Journal Entry",
+                                    "id": "70143"
+                                },
+                                {
+                                    "value": "5528"
+                                },
+                                {
+                                    "value": "Purely Canada Foods",
+                                    "id": "2376"
+                                },
+                                {
+                                    "value": "",
+                                    "id": ""
+                                },
+                                {
+                                    "value": "2024-08-02"
+                                },
+                                {
+                                    "value": "-200000.00"
+                                },
+                                {
+                                    "value": "-200000.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2024-07-16"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "67726"
+                                },
+                                {
+                                    "value": "747"
+                                },
+                                {
+                                    "value": "Purely Canada Foods",
+                                    "id": "2376"
+                                },
+                                {
+                                    "value": "-Corporate",
+                                    "id": "4"
+                                },
+                                {
+                                    "value": "2024-08-15"
+                                },
+                                {
+                                    "value": "4152.78"
+                                },
+                                {
+                                    "value": "4152.78"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2024-08-23"
+                                },
+                                {
+                                    "value": "Journal Entry",
+                                    "id": "71094"
+                                },
+                                {
+                                    "value": "5605"
+                                },
+                                {
+                                    "value": "Purely Canada Foods",
+                                    "id": "2376"
+                                },
+                                {
+                                    "value": "",
+                                    "id": ""
+                                },
+                                {
+                                    "value": "2024-08-23"
+                                },
+                                {
+                                    "value": "-8000.00"
+                                },
+                                {
+                                    "value": "-8000.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2024-08-25"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "73878"
+                                },
+                                {
+                                    "value": "MO240211"
+                                },
+                                {
+                                    "value": "Sunfresh Farms Ltd.",
+                                    "id": "3227"
+                                },
+                                {
+                                    "value": "Outlook",
+                                    "id": "14"
+                                },
+                                {
+                                    "value": "2024-09-24"
+                                },
+                                {
+                                    "value": "24240.00"
+                                },
+                                {
+                                    "value": "24240.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2024-08-31"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "73920"
+                                },
+                                {
+                                    "value": "MO240258"
+                                },
+                                {
+                                    "value": "Sunfresh Farms Ltd.",
+                                    "id": "3227"
+                                },
+                                {
+                                    "value": "Outlook",
+                                    "id": "14"
+                                },
+                                {
+                                    "value": "2024-09-30"
+                                },
+                                {
+                                    "value": "15620.00"
+                                },
+                                {
+                                    "value": "15620.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2024-10-05"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "74622"
+                                },
+                                {
+                                    "value": "2024 Clothing"
+                                },
+                                {
+                                    "value": "Stotz Equipment",
+                                    "id": "3142"
+                                },
+                                {
+                                    "value": "-Corporate",
+                                    "id": "4"
+                                },
+                                {
+                                    "value": "2024-10-05"
+                                },
+                                {
+                                    "value": "1554.00"
+                                },
+                                {
+                                    "value": "1554.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2024-10-05"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "74624"
+                                },
+                                {
+                                    "value": "2024 Clothing"
+                                },
+                                {
+                                    "value": "South Country Equipment.",
+                                    "id": "3075"
+                                },
+                                {
+                                    "value": "Regina",
+                                    "id": "3"
+                                },
+                                {
+                                    "value": "2024-10-05"
+                                },
+                                {
+                                    "value": "8214.00"
+                                },
+                                {
+                                    "value": "8214.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2024-10-05"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "74623"
+                                },
+                                {
+                                    "value": "2024 Clothing"
+                                },
+                                {
+                                    "value": "Brandt Tractor",
+                                    "id": "3137"
+                                },
+                                {
+                                    "value": "Prince Albert",
+                                    "id": "2"
+                                },
+                                {
+                                    "value": "2024-11-04"
+                                },
+                                {
+                                    "value": "2220.00"
+                                },
+                                {
+                                    "value": "2220.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2024-11-04"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "79483"
+                                },
+                                {
+                                    "value": "2000027506"
+                                },
+                                {
+                                    "value": "Cargill Limited",
+                                    "id": "2"
+                                },
+                                {
+                                    "value": "Hafford",
+                                    "id": "9"
+                                },
+                                {
+                                    "value": "2024-12-04"
+                                },
+                                {
+                                    "value": "656009.95"
+                                },
+                                {
+                                    "value": "656009.95"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2024-11-04"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "79482"
+                                },
+                                {
+                                    "value": "2000027479"
+                                },
+                                {
+                                    "value": "Cargill Limited",
+                                    "id": "2"
+                                },
+                                {
+                                    "value": "Hafford",
+                                    "id": "9"
+                                },
+                                {
+                                    "value": "2024-12-04"
+                                },
+                                {
+                                    "value": "2516703.21"
+                                },
+                                {
+                                    "value": "474674.58"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2024-11-23"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "82198"
+                                },
+                                {
+                                    "value": "MO240596"
+                                },
+                                {
+                                    "value": "Loblaws",
+                                    "id": "3971"
+                                },
+                                {
+                                    "value": "Outlook",
+                                    "id": "14"
+                                },
+                                {
+                                    "value": "2024-12-23"
+                                },
+                                {
+                                    "value": "6750.00"
+                                },
+                                {
+                                    "value": "182.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-01-15"
+                                },
+                                {
+                                    "value": "Payment",
+                                    "id": "82144"
+                                },
+                                {
+                                    "value": ""
+                                },
+                                {
+                                    "value": "721132 AB Ltd. c/o Deitz Farms",
+                                    "id": "4409"
+                                },
+                                {
+                                    "value": "Waldeck",
+                                    "id": "6"
+                                },
+                                {
+                                    "value": "2025-01-15"
+                                },
+                                {
+                                    "value": "-300000.00"
+                                },
+                                {
+                                    "value": "-3024.14"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-01-23"
+                                },
+                                {
+                                    "value": "Payment",
+                                    "id": "82670"
+                                },
+                                {
+                                    "value": ""
+                                },
+                                {
+                                    "value": "Viterra - Belle Plaine",
+                                    "id": "1707"
+                                },
+                                {
+                                    "value": "Regina",
+                                    "id": "3"
+                                },
+                                {
+                                    "value": "2025-01-23"
+                                },
+                                {
+                                    "value": "-207105.17"
+                                },
+                                {
+                                    "value": "-42.41"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-01-22"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "82431"
+                                },
+                                {
+                                    "value": "Mud Scrapers"
+                                },
+                                {
+                                    "value": "Brent Vogt",
+                                    "id": "4457"
+                                },
+                                {
+                                    "value": "The Pas",
+                                    "id": "7"
+                                },
+                                {
+                                    "value": "2025-02-21"
+                                },
+                                {
+                                    "value": "8820.00"
+                                },
+                                {
+                                    "value": "420.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-01-31"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "84563"
+                                },
+                                {
+                                    "value": "20241031F"
+                                },
+                                {
+                                    "value": "Freshstone Brands Inc",
+                                    "id": "3338"
+                                },
+                                {
+                                    "value": "Outlook",
+                                    "id": "14"
+                                },
+                                {
+                                    "value": "2025-03-02"
+                                },
+                                {
+                                    "value": "939.55"
+                                },
+                                {
+                                    "value": "939.55"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-01-31"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "83207"
+                                },
+                                {
+                                    "value": "MO250073"
+                                },
+                                {
+                                    "value": "Freshstone Brands Inc",
+                                    "id": "3338"
+                                },
+                                {
+                                    "value": "Outlook",
+                                    "id": "14"
+                                },
+                                {
+                                    "value": "2025-03-02"
+                                },
+                                {
+                                    "value": "8241.00"
+                                },
+                                {
+                                    "value": "8241.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-02-07"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "84519"
+                                },
+                                {
+                                    "value": "MO250108"
+                                },
+                                {
+                                    "value": "Freshstone Brands Inc",
+                                    "id": "3338"
+                                },
+                                {
+                                    "value": "Outlook",
+                                    "id": "14"
+                                },
+                                {
+                                    "value": "2025-03-09"
+                                },
+                                {
+                                    "value": "8200.00"
+                                },
+                                {
+                                    "value": "8200.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-02-11"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "83671"
+                                },
+                                {
+                                    "value": "005302-P"
+                                },
+                                {
+                                    "value": "ADM Agri-Industries Company",
+                                    "id": "4490"
+                                },
+                                {
+                                    "value": "Hafford",
+                                    "id": "9"
+                                },
+                                {
+                                    "value": "2025-03-13"
+                                },
+                                {
+                                    "value": "791105.47"
+                                },
+                                {
+                                    "value": ".01"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-02-14"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "84524"
+                                },
+                                {
+                                    "value": "MO250128"
+                                },
+                                {
+                                    "value": "Freshstone Brands Inc",
+                                    "id": "3338"
+                                },
+                                {
+                                    "value": "Outlook",
+                                    "id": "14"
+                                },
+                                {
+                                    "value": "2025-03-16"
+                                },
+                                {
+                                    "value": "8200.00"
+                                },
+                                {
+                                    "value": "8200.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-03-24"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "86934"
+                                },
+                                {
+                                    "value": "20250324"
+                                },
+                                {
+                                    "value": "PIP Lethbridge Inc.",
+                                    "id": "4589"
+                                },
+                                {
+                                    "value": "Prince Albert",
+                                    "id": "2"
+                                },
+                                {
+                                    "value": "2025-03-24"
+                                },
+                                {
+                                    "value": "226675.86"
+                                },
+                                {
+                                    "value": ".01"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-02-26"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "85117"
+                                },
+                                {
+                                    "value": "MO250152"
+                                },
+                                {
+                                    "value": "Freshstone Brands Inc",
+                                    "id": "3338"
+                                },
+                                {
+                                    "value": "Outlook",
+                                    "id": "14"
+                                },
+                                {
+                                    "value": "2025-03-28"
+                                },
+                                {
+                                    "value": "8200.00"
+                                },
+                                {
+                                    "value": "8200.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-03-28"
+                                },
+                                {
+                                    "value": "Journal Entry",
+                                    "id": "90856"
+                                },
+                                {
+                                    "value": "7308"
+                                },
+                                {
+                                    "value": "Southern Alberta Livestock Exchange Ltd.",
+                                    "id": "4685"
+                                },
+                                {
+                                    "value": "",
+                                    "id": ""
+                                },
+                                {
+                                    "value": "2025-03-28"
+                                },
+                                {
+                                    "value": "-1323712.59"
+                                },
+                                {
+                                    "value": "-182.81"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-02-27"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "84564"
+                                },
+                                {
+                                    "value": "20240227F"
+                                },
+                                {
+                                    "value": "Freshstone Brands Inc",
+                                    "id": "3338"
+                                },
+                                {
+                                    "value": "Outlook",
+                                    "id": "14"
+                                },
+                                {
+                                    "value": "2025-03-29"
+                                },
+                                {
+                                    "value": "1103.55"
+                                },
+                                {
+                                    "value": "1103.55"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-02-28"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "84710"
+                                },
+                                {
+                                    "value": "20250228I"
+                                },
+                                {
+                                    "value": "Sunfresh Farms Ltd.",
+                                    "id": "3227"
+                                },
+                                {
+                                    "value": "Outlook",
+                                    "id": "14"
+                                },
+                                {
+                                    "value": "2025-03-30"
+                                },
+                                {
+                                    "value": "398.60"
+                                },
+                                {
+                                    "value": "398.60"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-04-15"
+                                },
+                                {
+                                    "value": "Payment",
+                                    "id": "90244"
+                                },
+                                {
+                                    "value": ""
+                                },
+                                {
+                                    "value": "Looma Limo c/o Reuben Hickman",
+                                    "id": "4408"
+                                },
+                                {
+                                    "value": "Waldeck",
+                                    "id": "6"
+                                },
+                                {
+                                    "value": "2025-04-15"
+                                },
+                                {
+                                    "value": "-3101.61"
+                                },
+                                {
+                                    "value": "-63.70"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-03-18"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "87372"
+                                },
+                                {
+                                    "value": "MO250223"
+                                },
+                                {
+                                    "value": "Freshstone Brands Inc",
+                                    "id": "3338"
+                                },
+                                {
+                                    "value": "Outlook",
+                                    "id": "14"
+                                },
+                                {
+                                    "value": "2025-04-17"
+                                },
+                                {
+                                    "value": "8200.00"
+                                },
+                                {
+                                    "value": "8200.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-03-31"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "87593"
+                                },
+                                {
+                                    "value": "Raffle CSA"
+                                },
+                                {
+                                    "value": "CSA",
+                                    "id": "3510"
+                                },
+                                {
+                                    "value": "Outlook",
+                                    "id": "14"
+                                },
+                                {
+                                    "value": "2025-04-30"
+                                },
+                                {
+                                    "value": "375.00"
+                                },
+                                {
+                                    "value": "375.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-04-02"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "87788"
+                                },
+                                {
+                                    "value": "MO250264I"
+                                },
+                                {
+                                    "value": "Freshstone Brands Inc",
+                                    "id": "3338"
+                                },
+                                {
+                                    "value": "Outlook",
+                                    "id": "14"
+                                },
+                                {
+                                    "value": "2025-05-02"
+                                },
+                                {
+                                    "value": "256.63"
+                                },
+                                {
+                                    "value": "256.63"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-04-02"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "87789"
+                                },
+                                {
+                                    "value": "MO250265I"
+                                },
+                                {
+                                    "value": "Can-Am Pepper Company Ltd. Canada",
+                                    "id": "4442"
+                                },
+                                {
+                                    "value": "Outlook",
+                                    "id": "14"
+                                },
+                                {
+                                    "value": "2025-05-02"
+                                },
+                                {
+                                    "value": "298.60"
+                                },
+                                {
+                                    "value": "298.60"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-04-09"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "88952"
+                                },
+                                {
+                                    "value": "MO250297"
+                                },
+                                {
+                                    "value": "Freshstone Brands Inc",
+                                    "id": "3338"
+                                },
+                                {
+                                    "value": "Outlook",
+                                    "id": "14"
+                                },
+                                {
+                                    "value": "2025-05-09"
+                                },
+                                {
+                                    "value": "6724.00"
+                                },
+                                {
+                                    "value": "6724.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-04-28"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "90417"
+                                },
+                                {
+                                    "value": "3000038624"
+                                },
+                                {
+                                    "value": "Cargill Limited",
+                                    "id": "2"
+                                },
+                                {
+                                    "value": "Eddystone - Cattle",
+                                    "id": "21"
+                                },
+                                {
+                                    "value": "2025-05-28"
+                                },
+                                {
+                                    "value": "1049857.81"
+                                },
+                                {
+                                    "value": "1049857.81"
+                                }
+                            ],
+                            "type": "Data"
+                        }
+                    ]
+                },
+                "Summary": {
+                    "ColData": [
+                        {
+                            "value": "Total for 91 or more days past due"
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": "6176643.42"
+                        },
+                        {
+                            "value": "4924608.54"
+                        }
+                    ]
+                },
+                "type": "Section"
+            },
+            {
+                "Header": {
+                    "ColData": [
+                        {
+                            "value": "61 - 90 days past due"
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        }
+                    ]
+                },
+                "Rows": {
+                    "Row": [
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-06-06"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "94415"
+                                },
+                                {
+                                    "value": "MO250392"
+                                },
+                                {
+                                    "value": "Freshstone Brands Inc",
+                                    "id": "3338"
+                                },
+                                {
+                                    "value": "Outlook",
+                                    "id": "14"
+                                },
+                                {
+                                    "value": "2025-07-06"
+                                },
+                                {
+                                    "value": "8200.00"
+                                },
+                                {
+                                    "value": "8200.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-06-17"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "94769"
+                                },
+                                {
+                                    "value": "MO250412"
+                                },
+                                {
+                                    "value": "Freshstone Brands Inc",
+                                    "id": "3338"
+                                },
+                                {
+                                    "value": "Outlook",
+                                    "id": "14"
+                                },
+                                {
+                                    "value": "2025-07-17"
+                                },
+                                {
+                                    "value": "1787.60"
+                                },
+                                {
+                                    "value": "1787.60"
+                                }
+                            ],
+                            "type": "Data"
+                        }
+                    ]
+                },
+                "Summary": {
+                    "ColData": [
+                        {
+                            "value": "Total for 61 - 90 days past due"
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": "9987.60"
+                        },
+                        {
+                            "value": "9987.60"
+                        }
+                    ]
+                },
+                "type": "Section"
+            },
+            {
+                "Header": {
+                    "ColData": [
+                        {
+                            "value": "31 - 60 days past due"
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        }
+                    ]
+                },
+                "Rows": {
+                    "Row": [
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-07-03"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "95470"
+                                },
+                                {
+                                    "value": "2025 Bales"
+                                },
+                                {
+                                    "value": "Lon Luce",
+                                    "id": "2614"
+                                },
+                                {
+                                    "value": "The Pas",
+                                    "id": "7"
+                                },
+                                {
+                                    "value": "2025-08-02"
+                                },
+                                {
+                                    "value": "1110.00"
+                                },
+                                {
+                                    "value": "1110.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-07-14"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "96293"
+                                },
+                                {
+                                    "value": "24-16 Jun 2025"
+                                },
+                                {
+                                    "value": "721132 AB Ltd. c/o Deitz Farms",
+                                    "id": "4409"
+                                },
+                                {
+                                    "value": "Waldeck",
+                                    "id": "6"
+                                },
+                                {
+                                    "value": "2025-08-13"
+                                },
+                                {
+                                    "value": "7632.00"
+                                },
+                                {
+                                    "value": "7632.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-07-23"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "97162"
+                                },
+                                {
+                                    "value": "20250723"
+                                },
+                                {
+                                    "value": "Gluska Farms Inc",
+                                    "id": "3589"
+                                },
+                                {
+                                    "value": "The Pas",
+                                    "id": "7"
+                                },
+                                {
+                                    "value": "2025-08-22"
+                                },
+                                {
+                                    "value": "13626.40"
+                                },
+                                {
+                                    "value": "13626.40"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-08-22"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "99317"
+                                },
+                                {
+                                    "value": "HT R094771"
+                                },
+                                {
+                                    "value": "Maxim Truck and Trailer",
+                                    "id": "4901"
+                                },
+                                {
+                                    "value": "Outlook",
+                                    "id": "14"
+                                },
+                                {
+                                    "value": "2025-08-22"
+                                },
+                                {
+                                    "value": "444.28"
+                                },
+                                {
+                                    "value": "444.28"
+                                }
+                            ],
+                            "type": "Data"
+                        }
+                    ]
+                },
+                "Summary": {
+                    "ColData": [
+                        {
+                            "value": "Total for 31 - 60 days past due"
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": "22812.68"
+                        },
+                        {
+                            "value": "22812.68"
+                        }
+                    ]
+                },
+                "type": "Section"
+            },
+            {
+                "Header": {
+                    "ColData": [
+                        {
+                            "value": "1 - 30 days past due"
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        }
+                    ]
+                },
+                "Rows": {
+                    "Row": [
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-07-31"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "99385"
+                                },
+                                {
+                                    "value": "2025-0353"
+                                },
+                                {
+                                    "value": "Soderglen South Inc..",
+                                    "id": "4665"
+                                },
+                                {
+                                    "value": "Airdrie",
+                                    "id": "19"
+                                },
+                                {
+                                    "value": "2025-08-30"
+                                },
+                                {
+                                    "value": "50000.00"
+                                },
+                                {
+                                    "value": "50000.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-08-01"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "100506"
+                                },
+                                {
+                                    "value": "MO250323"
+                                },
+                                {
+                                    "value": "Freshstone Brands Inc",
+                                    "id": "3338"
+                                },
+                                {
+                                    "value": "Outlook",
+                                    "id": "14"
+                                },
+                                {
+                                    "value": "2025-08-31"
+                                },
+                                {
+                                    "value": "8282.00"
+                                },
+                                {
+                                    "value": "8282.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-08-11"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "98651"
+                                },
+                                {
+                                    "value": "2025001"
+                                },
+                                {
+                                    "value": "Pattison Agriculture",
+                                    "id": "3140"
+                                },
+                                {
+                                    "value": "Swift Current",
+                                    "id": "5"
+                                },
+                                {
+                                    "value": "2025-09-10"
+                                },
+                                {
+                                    "value": "54667.00"
+                                },
+                                {
+                                    "value": "54667.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-09-11"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "100666"
+                                },
+                                {
+                                    "value": "3000057977"
+                                },
+                                {
+                                    "value": "Warner Industries Ltd",
+                                    "id": "4932"
+                                },
+                                {
+                                    "value": "Outlook",
+                                    "id": "14"
+                                },
+                                {
+                                    "value": "2025-09-11"
+                                },
+                                {
+                                    "value": "2800.00"
+                                },
+                                {
+                                    "value": "2800.00"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-09-12"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "100937"
+                                },
+                                {
+                                    "value": "525295"
+                                },
+                                {
+                                    "value": "Brandt Tractor",
+                                    "id": "3137"
+                                },
+                                {
+                                    "value": "Airdrie",
+                                    "id": "19"
+                                },
+                                {
+                                    "value": "2025-09-12"
+                                },
+                                {
+                                    "value": "165000.00"
+                                },
+                                {
+                                    "value": "165000.00"
+                                }
+                            ],
+                            "type": "Data"
+                        }
+                    ]
+                },
+                "Summary": {
+                    "ColData": [
+                        {
+                            "value": "Total for 1 - 30 days past due"
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": "280749.00"
+                        },
+                        {
+                            "value": "280749.00"
+                        }
+                    ]
+                },
+                "type": "Section"
+            },
+            {
+                "Header": {
+                    "ColData": [
+                        {
+                            "value": "Current"
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        }
+                    ]
+                },
+                "Rows": {
+                    "Row": [
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-08-26"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "100802"
+                                },
+                                {
+                                    "value": "525294"
+                                },
+                                {
+                                    "value": "Heartland Livestock",
+                                    "id": "2290"
+                                },
+                                {
+                                    "value": "Calderbank",
+                                    "id": "13"
+                                },
+                                {
+                                    "value": "2025-09-25"
+                                },
+                                {
+                                    "value": "17104.79"
+                                },
+                                {
+                                    "value": "17104.79"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-09-03"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "100244"
+                                },
+                                {
+                                    "value": "3000056550"
+                                },
+                                {
+                                    "value": "Cargill Limited",
+                                    "id": "2"
+                                },
+                                {
+                                    "value": "Airdrie",
+                                    "id": "19"
+                                },
+                                {
+                                    "value": "2025-10-03"
+                                },
+                                {
+                                    "value": "47701.53"
+                                },
+                                {
+                                    "value": "47701.53"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-09-04"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "100281"
+                                },
+                                {
+                                    "value": "25-0358"
+                                },
+                                {
+                                    "value": "Anchor Lazy U Cattle Co. Ltd..",
+                                    "id": "4572"
+                                },
+                                {
+                                    "value": "Airdrie",
+                                    "id": "19"
+                                },
+                                {
+                                    "value": "2025-10-04"
+                                },
+                                {
+                                    "value": "29596.53"
+                                },
+                                {
+                                    "value": "29596.53"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-09-09"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "100633"
+                                },
+                                {
+                                    "value": "3000057976"
+                                },
+                                {
+                                    "value": "Cargill Limited",
+                                    "id": "2"
+                                },
+                                {
+                                    "value": "Airdrie",
+                                    "id": "19"
+                                },
+                                {
+                                    "value": "2025-10-09"
+                                },
+                                {
+                                    "value": "148378.19"
+                                },
+                                {
+                                    "value": "148378.19"
+                                }
+                            ],
+                            "type": "Data"
+                        },
+                        {
+                            "ColData": [
+                                {
+                                    "value": "2025-09-10"
+                                },
+                                {
+                                    "value": "Invoice",
+                                    "id": "101523"
+                                },
+                                {
+                                    "value": "2025 Flex+ Rewards"
+                                },
+                                {
+                                    "value": "Corteva Agriscience",
+                                    "id": "1588"
+                                },
+                                {
+                                    "value": "-Corporate",
+                                    "id": "4"
+                                },
+                                {
+                                    "value": "2025-10-10"
+                                },
+                                {
+                                    "value": "704642.93"
+                                },
+                                {
+                                    "value": "704642.93"
+                                }
+                            ],
+                            "type": "Data"
+                        }
+                    ]
+                },
+                "Summary": {
+                    "ColData": [
+                        {
+                            "value": "Total for Current"
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": "947423.97"
+                        },
+                        {
+                            "value": "947423.97"
+                        }
+                    ]
+                },
+                "type": "Section"
+            },
+            {
+                "Summary": {
+                    "ColData": [
+                        {
+                            "value": "TOTAL"
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": ""
+                        },
+                        {
+                            "value": "7437616.67"
+                        },
+                        {
+                            "value": "6185581.79"
+                        }
+                    ]
+                },
+                "type": "Section"
+            }
+        ]
+    }
+}
