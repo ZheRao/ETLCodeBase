@@ -11,6 +11,8 @@ Exposed API:
 import pandas as pd
 from pathlib import Path 
 import datetime as dt
+import json
+from importlib.resources import files
 
 from ETLCodeBase.utils.filesystem import read_configs
 from ETLCodeBase.gold._helpers import classify_pillar, standardize_product
@@ -120,7 +122,32 @@ def _revise_signs(df:pd.DataFrame, accounts:pd.DataFrame) -> pd.DataFrame:
     df["AmountDisplay"] = df.apply(lambda x: -x["AmountCAD"] if x["AccID"] in expense_accounts.AccID.unique() else x["AmountCAD"], axis=1)
     return df
 
+def _prepare_actuals_for_budget(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Purpose:
+        - create summarized actuals by `Location`, `AccNum`, `FiscalYear`, `Month`, with aggregated `AmountDisplay`
+        - save to budget location for consolidation with budgets
+    """
+    df = df[df["FiscalYear"] >= 2025].copy()
+    df["AccName"] = df["AccName"].str.strip()
+    actuals = df.groupby(["Location","AccNum", "FiscalYear", "Month"]).agg({"AmountDisplay":"sum"}).reset_index(drop=False)
+    actuals["DataType"] = "Actual"
+    actuals = actuals.rename(columns={"AmountDisplay": "AmountCAD"})
+    return actuals
 
+
+def _write_fx(fx:float) -> None:
+    """
+    Purpose:
+        - write fx out as a system state
+    """
+    path = files("ETLCodeBase.json_configs").joinpath("state/fx.json")
+    meta = {
+        "fx": fx,
+        "timestamp": dt.datetime.now().isoformat()
+    }
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=4, ensure_ascii=False)
 
 
 
@@ -142,6 +169,8 @@ def process_finance(write_out:bool=True) -> pd.DataFrame:
     df = pd.read_csv(Path(path_config["root"]) / Path(path_config["silver"]["PL"]) / "ProfitAndLoss.csv", dtype={"Class":str, "ClassID":str})
     if len(df.FXRate.unique()) != 1: raise ValueError(f"Expected silver QBO PL FX rate to be singular across all records, got {df.FXRate.unique()}")
     fx = df.loc[0,"FXRate"]
+    _write_fx(fx=fx)
+    
     df = _process_dates(df=df)
     df = _process_location(df=df)
     df = classify_pillar(df=df)
@@ -159,6 +188,11 @@ def process_finance(write_out:bool=True) -> pd.DataFrame:
     if write_out:
         df.to_csv(out_root/"PL.csv", index=False)
         df.to_excel(out_root/"PL.xlsx", sheet_name="Transactions", index=False)
+
+        budget_out_path = Path(path_config["root"]) / Path(path_config["gold"]["budget"]) / "Actuals"
+        actuals = _prepare_actuals_for_budget(df=df)
+        actuals.to_csv(budget_out_path / "actuals.csv", index=False)
+
         pillar_out_root = Path(path_config["root"]) / Path(path_config["gold"]["pillar_dashboard"])
         for pillar in ["Grain", "Cattle", "Seed", "Produce"]:
             df[df["Pillar"]==pillar].to_excel(pillar_out_root/pillar/"PL.xlsx", sheet_name="Transactions", index=False)
