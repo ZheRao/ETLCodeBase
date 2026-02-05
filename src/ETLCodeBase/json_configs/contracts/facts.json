@@ -11,9 +11,10 @@
         "Produce": ["BritishColumbia (produce)", "Outlook", "Arizona (produce)", "Montana (produce)", "Seeds USA"],
         "Cattle": ["Airdrie", "Eddystone (cattle)", "Ashcroft", "Home Ranch", "Diamond S", "Wolf Ranch", "Fraser River Ranch", "Moon Ranch", "Waldeck", "Calderbank","BC Cattle MFL"],
         "Grain": ["Eddystone (grain)", "Arizona (grain)", "Colorado", "Swift Current", "Regina", "Raymore", "Prince Albert", "The Pas",
-                  "Kamsack", "Hafford", "Yorkton", "Fly Creek", "Camp 4", "Havre", "Billings"],
+                  "Kamsack", "Hafford", "Yorkton", "Fly Creek", "Camp 4", "Havre", "Billings", "Delaware"],
         "Seed": ["NexGen", "Seeds"],
-        "Others": ["Eddystone (corporate)", "Arizona (corporate)", "Legacy", "BritishColumbia (corporate)", "Corporate"]
+        "Others": ["Eddystone (corporate)", "Arizona (corporate)", "BritishColumbia (corporate)", "Corporate", "North Farm (deleted)",
+                    "Cache/Fischer/Loon - DNU", "Havre (deleted)", "Missing"]
     },
     "br_ranches": ["Ashcroft", "Fraser River Ranch", "Moon Ranch", "Wolf Ranch", "Diamond S","Home Ranch"]
 }

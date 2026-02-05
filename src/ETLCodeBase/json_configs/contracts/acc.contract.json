@@ -1,5 +1,5 @@
 {
-    "acc_reroutes": {
+    "budget_reroutes": {
         "accnum_reroute": {
             "MFL405101": "MFL405110", 
             "MFL405102":"MFL405120", 
@@ -9,7 +9,9 @@
             "MFBC575000": "MFBC575020",
             "MFBC629000": "MFBC629010", 
             "MFBC531010": "MFBC531050"
-        }, 
+        }
+    },
+    "actuals_reroutes": {
         "accid_reroute": {
             "MFBC250": "MFBC210", 
             "MFBC216":"MFBC210", 
