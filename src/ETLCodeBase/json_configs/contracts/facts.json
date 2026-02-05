@@ -1,0 +1,19 @@
+{
+    "commodities": {
+        "Produce": ["Strawberry", "Watermelon", "Cantaloupe", "Market Garden", "Broccoli", "Pumpkin", "Sweet Corn", "Cauliflower", "Squash", "Honeydew Melon", "Potato", "Carrot", "Cabbage",
+                    "Lettuce", "Brussel Sprouts", "Prairie Pathways", "Beet", "Corn Maze", "CSA"],
+        "Grain": ["Blackeye Pea", "Winter Wheat", "Durum", "Cotton", "Chickpea", "Barley", "Green Lentil", "Red Lentil", "Canola", 
+                    "Wheat","Field Pea", "Corn", "Oat", "Soybean", "Bean"],
+        "Cattle": ["Weaned Calves", "Cull Bull", "Cull Cow", "Bred Heifer", "Purebred Yealing Bull", "Purebred Heifer", 
+                    "Purebred Cow", "Purebred Bull", "Cow", "Bull", "Steer", "Heifer", "Yearling", "Calf"]
+    },
+    "locations": {
+        "Produce": ["BritishColumbia (produce)", "Outlook", "Arizona (produce)", "Montana (produce)", "Seeds USA"],
+        "Cattle": ["Airdrie", "Eddystone (cattle)", "Ashcroft", "Home Ranch", "Diamond S", "Wolf Ranch", "Fraser River Ranch", "Moon Ranch", "Waldeck", "Calderbank","BC Cattle MFL"],
+        "Grain": ["Eddystone (grain)", "Arizona (grain)", "Colorado", "Swift Current", "Regina", "Raymore", "Prince Albert", "The Pas",
+                  "Kamsack", "Hafford", "Yorkton", "Fly Creek", "Camp 4", "Havre", "Billings"],
+        "Seed": ["NexGen", "Seeds"],
+        "Others": ["Eddystone (corporate)", "Arizona (corporate)", "Legacy", "BritishColumbia (corporate)", "Corporate"]
+    },
+    "br_ranches": ["Ashcroft", "Fraser River Ranch", "Moon Ranch", "Wolf Ranch", "Diamond S","Home Ranch"]
+}

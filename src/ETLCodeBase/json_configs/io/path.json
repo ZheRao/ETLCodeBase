@@ -1,0 +1,22 @@
+{
+    "root": "c:/Users/ZheRao/OneDrive - Monette Farms/Monette Farms Team Site - Innovation Projects/Production/Database",
+    "gold": {
+        "weekly_banking": "Gold/FinanceProject/WeeklyBanking",
+        "inventory": "Gold/InventoryProject",
+        "payroll": "Gold/HRProject/PayrollProject",
+        "finance_operational": "Gold/FinanceOperationalProject",
+        "budget": "Gold/BudgetProject",
+        "QBOTime": "Gold/HRProject/QBOTimeProject",
+        "hr_combined": "Gold/HRProject/CombinedSummary",
+        "pillar_dashboard": "Gold/DirectorDashboards",
+        "APReporting": "Gold/FinanceProject/APReporting"
+    },
+    "silver": {
+        "Dimension": "Silver/QBO/Dimension/CSV",
+        "Raw": "Silver/QBO/Fact/Raw",
+        "PL": "Silver/QBO/Fact/ProfitAndLoss",
+        "GL": "Silver/QBO/Fact/GeneralLedger",
+        "Time": "Silver/QBOie",
+        "APAR": "Silver/QBO/Fact/APAR"
+    }
+}
