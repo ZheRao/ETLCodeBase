@@ -117,9 +117,9 @@ def _prepare_actuals_for_budget(df: pd.DataFrame) -> pd.DataFrame:
         - create summarized actuals by `Location`, `AccNum`, `FiscalYear`, `Month`, with aggregated `AmountDisplay`
         - save to budget location for consolidation with budgets
     """
-    df = df[df["FiscalYear"] >= 2025].copy()
+    df = df[df["FiscalYear"] >= 2024].copy()
     df["AccName"] = df["AccName"].str.strip()
-    actuals = df.groupby(["Location","AccNum", "FiscalYear", "Month"]).agg({"AmountDisplay":"sum"}).reset_index(drop=False)
+    actuals = df.groupby(["Location","AccNum", "FiscalYear", "Month", "AccID"]).agg({"AmountDisplay":"sum"}).reset_index(drop=False)
     actuals["DataType"] = "Actual"
     actuals = actuals.rename(columns={"AmountDisplay": "AmountCAD"})
     return actuals
