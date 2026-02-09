@@ -117,11 +117,13 @@ def compose_budget_actual(write_out:bool=True) -> pd.DataFrame:
 
     df = _add_fx(df=df)
 
+    df= classify_pillar(df=df)
+
     if write_out:
         print("\nSaving ...")
+        df.to_csv(root / "PowerBI" / "BudgetActual.csv", index=False)
         df.to_excel(root / "PowerBI" / "BudgetActual.xlsx", sheet_name="Budget", index=False)
         pillar_root = Path(path_config["root"]) / Path(path_config["gold"]["pillar_dashboard"])
-        df= classify_pillar(df=df)
         for pillar in ["Grain", "Cattle", "Seed", "Produce"]:
             df[df["Pillar"] == pillar].to_excel(pillar_root/pillar/"BudgetActual.xlsx", sheet_name="Budget", index=False)
 
