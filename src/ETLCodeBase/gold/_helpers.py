@@ -6,6 +6,8 @@ Purpose:
 
 Exposed API:
     - `classify_pillar` - classify and create a new column `Pillar` based on `Location` column
+    - `standardize_product` - from account names, identify and standardize `commodity`
+    - `accid_reroute` - reroute `AccID` based on Finance contract
 """
 
 import pandas as pd
@@ -121,6 +123,20 @@ def standardize_product(df:pd.DataFrame, for_budget:bool=False) -> pd.DataFrame:
     else:
         if "AccName" not in df.columns: raise KeyError("Column used to standardize product is not found, missing 'AccName'")
     df["Commodity"] = df.apply(lambda x: _identify_product(x), axis=1)
+    return df
+
+def accid_reroute(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Input:
+        - df: data frame with `AccID`
+
+    Output:
+        - df: data frame with `AccID` rerouted
+    """
+    if "AccID" not in df.columns: raise KeyError("'AccID' column missing for rerouting acc IDs for silver QBO PL report")
+    acc_contract = read_configs(config_type="contracts",name="acc.contract.json")
+    accid_reroute = acc_contract["actuals_reroutes"]["accid_reroute"]
+    df["AccID"] = df["AccID"].replace(accid_reroute)
     return df
 
 

@@ -15,7 +15,7 @@ import json
 from importlib.resources import files
 
 from ETLCodeBase.utils.filesystem import read_configs
-from ETLCodeBase.gold._helpers import classify_pillar, standardize_product
+from ETLCodeBase.gold._helpers import classify_pillar, standardize_product, accid_reroute
 
 
 
@@ -84,17 +84,6 @@ def _adjust_records_location_corp(df: pd.DataFrame) -> pd.DataFrame:
     df.loc[((df["FiscalYear"] >= 2024) & (df["Location"].str.contains("Arizona",case=False))),"Location"] = "Arizona (produce)"
     df.loc[df["Location"] == "BritishColumbia (produce)", "Corp"] = "MPL"
     df.loc[df["Location"]=="Outlook", "Corp"] = "MPL"
-    return df
-
-def _accid_reroute(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Purpose:
-        - account ID reroute from finance provided contracts
-    """
-    if "AccID" not in df.columns: raise KeyError("'AccID' column missing for rerouting acc IDs for silver QBO PL report")
-    acc_contract = read_configs(config_type="contracts",name="acc.contract.json")
-    accid_reroute = acc_contract["actuals_reroutes"]["accid_reroute"]
-    df["AccID"] = df["AccID"].replace(accid_reroute)
     return df
 
 def _process_accounts(write_out:bool, acc_path_silver:Path, acc_out_root:Path) -> pd.DataFrame:
@@ -175,7 +164,7 @@ def process_finance(write_out:bool=True) -> pd.DataFrame:
     df = _process_location(df=df)
     df = classify_pillar(df=df)
     df = _adjust_records_location_corp(df=df)
-    df = _accid_reroute(df=df)
+    df = accid_reroute(df=df)
 
     acc_path_silver = Path(path_config["root"]) / Path(path_config["silver"]["Dimension"]) / "Account.csv"
     out_root = Path(path_config["root"]) / Path(path_config["gold"]["finance_operational"])

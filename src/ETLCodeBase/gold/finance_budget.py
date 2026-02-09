@@ -12,7 +12,7 @@ import pandas as pd
 from pathlib import Path 
 
 from ETLCodeBase.utils.filesystem import read_configs
-from ETLCodeBase.gold._helpers import classify_pillar
+from ETLCodeBase.gold._helpers import classify_pillar, accid_reroute
 
 def _extract_actuals(root:Path) -> pd.DataFrame:
     """
@@ -104,6 +104,7 @@ def compose_budget_actual(write_out:bool=True) -> pd.DataFrame:
         - df: consolidated data frame with
             - `Location`, `AccNum`, `FiscalYear`, `Month`, `DataType`, `AccID`, `FXRate`, `AmountCAD` (not to confused with `AmountCAD` from QBO PL, this corresponds to `AmountDisplay`)
     """
+    print("\nStarting Budget to Actual Transformation\n")
     path_config = read_configs(config_type="io", name="path.json")
     root = Path(path_config["root"]) / Path(path_config["gold"]["budget"])
     budget = _extract_budget_25(root=root)
@@ -114,6 +115,8 @@ def compose_budget_actual(write_out:bool=True) -> pd.DataFrame:
     df = pd.concat([budget, actual], ignore_index=True)
 
     df = _accid_map(df=df, path_config=path_config)
+
+    df = accid_reroute(df=df)
 
     df = _add_fx(df=df)
 
