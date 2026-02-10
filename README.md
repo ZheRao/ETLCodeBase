@@ -188,3 +188,15 @@ Evolution compounds it.
 The goal is not architectural purity.
 
 The goal is **durable clarity under real-world constraints.**
+
+## Security & Data Policy
+
+This repository intentionally contains **code only**.
+
+All organization-specific materials are excluded, including (but not limited to):
+- `json_configs/io/*` (paths, storage routing, environment-specific I/O)
+- `json_configs/contracts/*` (account mappings, business rules, facts)
+- any real datasets, report outputs, or customer/company identifiers
+
+These inputs are treated as **private deployment artifacts** and are injected at runtime via local configuration (not version control).
+
