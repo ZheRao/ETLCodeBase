@@ -1,17 +1,25 @@
+# Python cache / bytecode
 __pycache__/
-*.pyc 
-.venv/
+*.py[cod]
 
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables
 .env
 *.env
 
-scripts/
-notebooks/
+# Packaging
+*.egg-info/
 
-*.py[cod]
+# OS / Editors
 .DS_Store
 .vscode/
+.idea/
 
-src/code_base.egg-info/
-
+# Project-specific
+scripts/
+notebooks/
 src/ETLCodeBase/dev/
