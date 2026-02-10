@@ -23,3 +23,5 @@ env/
 scripts/
 notebooks/
 src/ETLCodeBase/dev/
+src/ETLCodeBase/json_configs/io
+src/ETLCodeBase/json_configs/contracts
