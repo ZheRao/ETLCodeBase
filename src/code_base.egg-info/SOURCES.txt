@@ -1,7 +1,0 @@
-pyproject.toml
-src/ETLCodeBase/__init__.py
-src/ETLCodeBase/test.py
-src/code_base.egg-info/PKG-INFO
-src/code_base.egg-info/SOURCES.txt
-src/code_base.egg-info/dependency_links.txt
-src/code_base.egg-info/top_level.txt
