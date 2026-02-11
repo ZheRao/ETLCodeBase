@@ -14,6 +14,7 @@ import yaml
 from io import StringIO
 from bs4 import BeautifulSoup
 import time
+from ETLCodeBase.utils.filesystem import read_configs
 
 
 class Job:
@@ -98,7 +99,8 @@ class QBOETL(Job):
         self.GL_raw_cols = ["TransactionDate", "TransactionType", "DocNumber", "IsAdjust", "Name", "Memo", "SplitAcc", "Amount", "Balance"]
         self.acctype_QBO_expense = ["Expense","Cost of Goods Sold", "Other Expense"]
         self.profittype_cube_expense = ["Cost of Goods Sold", "Direct Operating Expenses", "Operating Overheads", "Other Expense"]
-        default_fx = 1.3516
+        fx_config = read_configs(config_type="state",name="fx.json")
+        default_fx = fx_config["fx"]
         if use_live_fx:
             try:
                 self.get_fx()
