@@ -12,6 +12,8 @@ Exposed API:
 """
 
 import pandas as pd
+from pathlib import Path
+import datetime as dt
 
 from ETLCodeBase.utils.filesystem import read_configs
 
@@ -149,44 +151,49 @@ def process_pp(df:pd.DataFrame, date_col:str, write_out:bool=False) -> pd.DataFr
             - caution: should be done with care, manual modification to the file needed afterwards (do it only when the payperiod Excel input file is modified)
             - duplicated problem - e.g., 23-PP22 has Fiscal year 2023 and 2024 - rank by PPName and FiscalYear, than drop the earlier FiscalYear record
     
-    Outpu:
-        - df: combined 
+    Output:
+        - df: combined with payperiods info
+
+    Purpose:
+        - read `Payperiods.csv`, assigned payperiods based on which adjust intervel a transaction date falls into
     """
-    # # load payperiods
-    # payperiods = pd.read_csv(self.gold_path["payroll"]/"Payperiods.csv")
-    # payperiods["START"] = pd.to_datetime(payperiods["START"])
-    # payperiods["END"] = pd.to_datetime(payperiods["END"])
-    # payperiods = payperiods.loc[:,["PP","START","END","Cycle","FiscalYear"]]
-    # payperiods = payperiods.rename(columns={"PP":"PPNum"})
-    # payperiods["PPName"] = payperiods["Cycle"].astype(str).str.slice(2) + "-" + "PP" + payperiods["PPNum"].astype(str).str.zfill(2)
-    # # shift transaction dates - AZ: left 12 days, others: left 5 days
-    # offset_days = {"Arizona (produce)": 12, "Outlook": 12}
-    # df["days_offset"] = df["Location"].map(offset_days).fillna(5)
-    # df["date_shifted"] = df[date_col] - pd.to_timedelta(df["days_offset"],unit="days")
-    # df = df[df["date_shifted"]>=dt.datetime(2021,12,20)].copy(deep=True)
-    # # construct interval index object for all periods
-    # idx = pd.IntervalIndex.from_arrays(
-    #     left = payperiods["START"],
-    #     right = payperiods["END"],
-    #     closed = "both"
-    # )
-    # # determine which payperiod a transaction date belongs to by identifying the positional index inside the interval index object
-    # pos = idx.get_indexer(df["date_shifted"])
-    # # extract payperiod info based on positional indices
-    # ppnum = payperiods["PPNum"].to_numpy()
-    # ppname = payperiods["PPName"].to_numpy()
-    # cycle = payperiods["Cycle"].to_numpy()
-    # df["PPNum"] = ppnum[pos]
-    # df["PPName"] = ppname[pos]
-    # df["Cycle"] = cycle[pos]
-    # # create mapping for max fiscal year per payperiod to determine which fiscal year a payperiod should bleong to
-    # mapping_table = df.groupby(["days_offset","PPName"]).agg({"FiscalYear":"max"}).reset_index(drop=False)
-    # df = df.drop(columns=["FiscalYear"])
-    # df = pd.merge(df, mapping_table, on=["days_offset", "PPName"], how="left")
-    # # drop intermediate columns
-    # df = df.drop(columns=["days_offset", "date_shifted"])
-    # # df.loc[:,["PPName", "PPNum", "Cycle", "FiscalYear"]].drop_duplicates().to_csv(self.gold_path["payroll"].parent/ "OtherTables" / "PayPeriods.csv", index=False)
-    #     # take care of the duplicated problem - e.g., 23-PP22 has Fiscal year 2023 and 2024 - rank by PPName and FiscalYear, than drop the earlier FiscalYear record
-    # return df
+    # load payperiods
+    path_config = read_configs(config_type="io",name="path.json")
+    path = Path(path_config["root"]) / Path(path_config["gold"]["payroll"])
+    payperiods = pd.read_csv(path/"Payperiods.csv")
+    payperiods["START"] = pd.to_datetime(payperiods["START"])
+    payperiods["END"] = pd.to_datetime(payperiods["END"])
+    payperiods = payperiods.loc[:,["PP","START","END","Cycle","FiscalYear"]]
+    payperiods = payperiods.rename(columns={"PP":"PPNum"})
+    payperiods["PPName"] = payperiods["Cycle"].astype(str).str.slice(2) + "-" + "PP" + payperiods["PPNum"].astype(str).str.zfill(2)
+    # shift transaction dates - AZ: left 12 days, others: left 5 days
+    offset_days = {"Arizona (produce)": 12, "Outlook": 12}
+    df["days_offset"] = df["Location"].map(offset_days).fillna(5)
+    df["date_shifted"] = df[date_col] - pd.to_timedelta(df["days_offset"],unit="days")
+    df = df[df["date_shifted"]>=dt.datetime(2021,12,20)].copy(deep=True)
+    # construct interval index object for all periods
+    idx = pd.IntervalIndex.from_arrays(
+        left = payperiods["START"],
+        right = payperiods["END"],
+        closed = "both"
+    )
+    # determine which payperiod a transaction date belongs to by identifying the positional index inside the interval index object
+    pos = idx.get_indexer(df["date_shifted"])
+    # extract payperiod info based on positional indices
+    ppnum = payperiods["PPNum"].to_numpy()
+    ppname = payperiods["PPName"].to_numpy()
+    cycle = payperiods["Cycle"].to_numpy()
+    df["PPNum"] = ppnum[pos]
+    df["PPName"] = ppname[pos]
+    df["Cycle"] = cycle[pos]
+    # create mapping for max fiscal year per payperiod to determine which fiscal year a payperiod should bleong to
+    mapping_table = df.groupby(["days_offset","PPName"]).agg({"FiscalYear":"max"}).reset_index(drop=False)
+    df = df.drop(columns=["FiscalYear"])
+    df = pd.merge(df, mapping_table, on=["days_offset", "PPName"], how="left")
+    # drop intermediate columns
+    df = df.drop(columns=["days_offset", "date_shifted"])
+    if write_out:
+        df.loc[:,["PPName", "PPNum", "Cycle", "FiscalYear"]].drop_duplicates().to_csv(path.parent/ "OtherTables" / "PayPeriods.csv", index=False)
+    return df
 
 
