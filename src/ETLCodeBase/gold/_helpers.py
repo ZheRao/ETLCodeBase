@@ -143,7 +143,7 @@ def accid_reroute(df: pd.DataFrame) -> pd.DataFrame:
     df["AccID"] = df["AccID"].replace(accid_reroute)
     return df
 
-def process_pp(df:pd.DataFrame, date_col:str, write_out:bool=False) -> pd.DataFrame:
+def process_pp(df:pd.DataFrame, date_col:str, write_out:bool=True) -> pd.DataFrame:
     """ 
     Input:
         - df: data frame where pay period details needs to be mapped onto, based on date column
@@ -194,7 +194,12 @@ def process_pp(df:pd.DataFrame, date_col:str, write_out:bool=False) -> pd.DataFr
     # drop intermediate columns
     df = df.drop(columns=["days_offset", "date_shifted"])
     if write_out:
-        df.loc[:,["PPName", "PPNum", "Cycle", "FiscalYear"]].drop_duplicates().to_csv(path.parent/ "OtherTables" / "PayPeriods.csv", index=False)
+        (
+            df.loc[:,["PPName", "PPNum", "Cycle", "FiscalYear"]]
+            .sort_values(by=["PPName","FiscalYear"],ascending=False)
+            .drop_duplicates(subset=["PPName"],keep="last")
+            .to_csv(path.parent/ "OtherTables" / "PayPeriods.csv", index=False)
+        )
     return df
 
 def determine_fy(df:pd.DataFrame, date_col:str) -> pd.DataFrame:
