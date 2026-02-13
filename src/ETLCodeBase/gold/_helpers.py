@@ -9,6 +9,7 @@ Exposed API:
     - `standardize_product` - from account names, identify and standardize `commodity`
     - `accid_reroute` - reroute `AccID` based on Finance contract
     - `process_pp` - apply the payperiod number classification based on transactions date, process payperiod columns, and return the new dataframe
+    - `determine_fy` - identify fiscal year based on a date column
 """
 
 import pandas as pd
@@ -196,4 +197,22 @@ def process_pp(df:pd.DataFrame, date_col:str, write_out:bool=False) -> pd.DataFr
         df.loc[:,["PPName", "PPNum", "Cycle", "FiscalYear"]].drop_duplicates().to_csv(path.parent/ "OtherTables" / "PayPeriods.csv", index=False)
     return df
 
+def determine_fy(df:pd.DataFrame, date_col:str) -> pd.DataFrame:
+    """
+    Purpose:
+        - identify fiscal year based on date column
+    
+    Input: 
+        - df
+        - date_col
+    
+    Output: 
+        - df with `FiscalYear` column
+    """
+    df[date_col] = pd.to_datetime(df[date_col])
+    if "Month" not in df.columns: df["Month"] = df[date_col].dt.month_name()
+    df["FiscalYear"] = df[date_col].dt.year 
+    mask = df["Month"].isin(["November", "December"])
+    df.loc[mask, "FiscalYear"] = df.loc[mask, "FiscalYear"] + 1
+    return df
 
