@@ -96,7 +96,7 @@ def create_financial_summary(write_out:bool=True) -> pd.DataFrame:
         summary.to_excel(finance_root/"ProfitTypeSummary.xlsx", sheet_name="ProfitTypeSummary", index=False)
         pillar_root = Path(path_config["root"]) / Path(path_config["gold"]["pillar_dashboard"])
         for pillar in ["Grain", "Cattle", "Seed", "Produce"]:
-            summary[summary["Pillar"]==pillar].to_excel(pillar_root/pillar/"ProfitTypeSummary.xlsx", sheet_name="ProfitTypeSummary", index=False)
+            summary[summary["Pillar"].str.contains(pillar)].to_excel(pillar_root/pillar/"ProfitTypeSummary.xlsx", sheet_name="ProfitTypeSummary", index=False)
     
     return summary
 

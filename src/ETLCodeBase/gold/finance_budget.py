@@ -127,7 +127,7 @@ def compose_budget_actual(write_out:bool=True) -> pd.DataFrame:
         df.to_excel(root / "PowerBI" / "BudgetActual.xlsx", sheet_name="Budget", index=False)
         pillar_root = Path(path_config["root"]) / Path(path_config["gold"]["pillar_dashboard"])
         for pillar in ["Grain", "Cattle", "Seed", "Produce"]:
-            df[df["Pillar"] == pillar].to_excel(pillar_root/pillar/"BudgetActual.xlsx", sheet_name="Budget", index=False)
+            df[df["Pillar"].str.contains(pillar)].to_excel(pillar_root/pillar/"BudgetActual.xlsx", sheet_name="Budget", index=False)
 
     return df
 

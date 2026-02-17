@@ -117,7 +117,7 @@ def _prepare_actuals_for_budget(df: pd.DataFrame) -> pd.DataFrame:
         - create summarized actuals by `Location`, `AccNum`, `FiscalYear`, `Month`, with aggregated `AmountDisplay`
         - save to budget location for consolidation with budgets
     """
-    df = df[df["FiscalYear"] >= 2024].copy()
+    df = df[df["FiscalYear"] >= 2021].copy()
     df["AccName"] = df["AccName"].str.strip()
     actuals = df.groupby(["Location","AccNum", "FiscalYear", "Month", "AccID"]).agg({"AmountDisplay":"sum"}).reset_index(drop=False)
     actuals["DataType"] = "Actual"
@@ -184,7 +184,7 @@ def process_finance(write_out:bool=True) -> pd.DataFrame:
 
         pillar_out_root = Path(path_config["root"]) / Path(path_config["gold"]["pillar_dashboard"])
         for pillar in ["Grain", "Cattle", "Seed", "Produce"]:
-            df[df["Pillar"]==pillar].to_excel(pillar_out_root/pillar/"PL.xlsx", sheet_name="Transactions", index=False)
+            df[df["Pillar"].str.contains(pillar)].to_excel(pillar_out_root/pillar/"PL.xlsx", sheet_name="Transactions", index=False)
 
 
 
