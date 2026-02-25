@@ -37,16 +37,82 @@ def _extract_budget_25(root:Path) -> pd.DataFrame:
     df["Location"] = df["Location"].replace(budget_location_rename)
     return df
 
+def _format_budget_input(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Purpose:
+        - unpivot the amount per month, turn horizontal records into vertical records
+    """
+    df = df.melt(
+        id_vars=["Pillar", "Currency", "Location", "Category", "Account", "FiscalYear"],
+        var_name="Month",
+        value_name="Amount"
+    )
+    df = df.dropna(subset=["Amount"])
+    df["Amount"] = df["Amount"].astype(float)
+    df = df[df["Amount"]!=0].reset_index(drop=True)
+    return df
+
+def _convert_to_cad(df:pd.DataFrame) -> pd.DataFrame:
+    """
+    Purpose:
+        - based on `Currency` column, apply fx rate for `USD`
+        - create `AmountCAD` column
+    """
+    fx_config = read_configs(config_type="state", name="fx.json")
+    fx = fx_config["fx"]
+    m = df["Currency"].eq("USD")
+    df["AmountCAD"] = df["Amount"]* (1 + m * (fx-1))
+    return df
+
+def _accnum_extract(df:pd.DataFrame) -> pd.DataFrame:
+    """
+    Purpose:
+        - extract `AccNum` from `Account`
+        - e.g., extract "MSL566500" from "MSL 566500 Supplies"
+    """
+    if "Account" not in df.columns: raise KeyError("Missing 'Account' from Budget df, required to extract AccNum")
+    parts = df["Account"].str.split(" ", n=2, expand=True)
+    df["AccNum"] = parts[0] + parts[1]
+    return df
+
+
+def _apply_location_mapping(df:pd.DataFrame) -> pd.DataFrame:
+    """
+    Purpose:
+        - apply the contract to standardize and combine locations
+    """
+    map_contract = read_configs(config_type="contracts", name="mapping.json")
+    budget_location_map = map_contract["location"]["budgets"]
+    df["Location"] = df["Location"].replace(budget_location_map)
+    return df
+
+
 
 def _extract_budget(root:Path, year:list[int]=[2026]) -> pd.DataFrame:
     """
     Purpose:
         - read all targeted budget file, standardize column and add `FiscalYear` column if not available
-
-    Note:
-        - Place holder for actual 2026 budget code
+        - input columns
+            - `Pillar`, `Currency`, `Location`, `Category`, `Account`, `November`, ...
+        - output columns
+            - `Location`, `AccNum`, `FiscalYear`, `Month`, `DataType`, `AmountCAD`
     """
-    return 1
+    path = root / "Budgets" / "excel_formatted"
+    df_list = []
+    for y in year:
+        df = pd.read_csv(path / f"budgets_{y}.csv")
+        df["FiscalYear"] = y
+        df_list.append(df)
+    df = pd.concat(df_list, ignore_index=True)
+    df = df.loc[df["Location"]!="Delaware",:]
+    df = _format_budget_input(df=df)
+    df = _convert_to_cad(df=df)
+    df = _accnum_extract(df=df)
+    df["DataType"] = "Budget"
+    df = df.loc[:,["Location", "AccNum", "FiscalYear", "Month", "DataType", "AmountCAD"]]
+    df = _apply_location_mapping(df=df)
+    
+    return df
 
 def _budget_accnum_reroute(budget:pd.DataFrame) -> pd.DataFrame:
     """
@@ -79,7 +145,7 @@ def _accid_map(df:pd.DataFrame, path_config:str) -> pd.DataFrame:
     df["AccID"] = df["AccNum"].map(acc_mapping).fillna("Unsuccessful")
     alert = df[(df["AccID"]=="Unsuccessful")&(df["AmountCAD"]>0)]
     print("\nAccID mapping alerts: ")
-    print(alert)
+    print(alert.groupby(by=["Location","FiscalYear","AccNum","AccID"]).agg({"AmountCAD":"sum"}))
     return df
 
 def _add_fx(df:pd.DataFrame) -> pd.DataFrame:
@@ -107,7 +173,9 @@ def compose_budget_actual(write_out:bool=True) -> pd.DataFrame:
     print("\nStarting Budget to Actual Transformation\n")
     path_config = read_configs(config_type="io", name="path.json")
     root = Path(path_config["root"]) / Path(path_config["gold"]["budget"])
-    budget = _extract_budget_25(root=root)
+    budget_25 = _extract_budget_25(root=root)
+    budget_rest = _extract_budget(root=root,year=[2026])
+    budget = pd.concat([budget_25, budget_rest], ignore_index=True)
     budget = _budget_accnum_reroute(budget=budget)
     budget = _accid_map(df=budget, path_config=path_config)
     actual = _extract_actuals(root=root)

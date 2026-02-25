@@ -75,6 +75,9 @@ def _adjust_records_location_corp(df: pd.DataFrame) -> pd.DataFrame:
         - FY >= 2024, `Location` contains "Arizona" -> "Produce" Pillar + "Arizona (produce)" Location
         - "BritishColumbia (produce)" -> "MPL"
         - "Outlook" -> "MPL"
+    
+    Note:
+        - when Montana produce in the system, need to adjust for missing records in MPUSA differently, instead of putting it into Arizona
     """
     df.loc[((df["Corp"] == "MPUSA")&(df["Location"].isna())), "Location"] = "Arizona (produce)"
     df.loc[((df["Corp"] == "MPUSA")&(df["Location"]=="Missing")), "Location"] = "Arizona (produce)"
