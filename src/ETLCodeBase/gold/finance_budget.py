@@ -174,13 +174,14 @@ def compose_budget_actual(write_out:bool=True) -> pd.DataFrame:
     path_config = read_configs(config_type="io", name="path.json")
     root = Path(path_config["root"]) / Path(path_config["gold"]["budget"])
     budget_25 = _extract_budget_25(root=root)
-    budget_rest = _extract_budget(root=root,year=[2026])
+    year = [2026]
+    budget_rest = _extract_budget(root=root,year=year)
     budget = pd.concat([budget_25, budget_rest], ignore_index=True)
     budget = _budget_accnum_reroute(budget=budget)
     budget = _accid_map(df=budget, path_config=path_config)
     actual = _extract_actuals(root=root)
     print(f"Location missing in actual: {(set(budget.Location.unique()) - set(actual.Location.unique()))}")
-    print(f"Location missing in budget: {(set(actual.Location.unique()) - set(budget.Location.unique()))}")
+    print(f"Location missing in budget_{max(year)}: {(set(actual.Location.unique()) - set(budget[budget["FiscalYear"]==max(year)].Location.unique()))}")
     df = pd.concat([budget, actual], ignore_index=True)
 
     # df = accid_reroute(df=df)
