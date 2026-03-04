@@ -20,10 +20,12 @@ def _determine_min_date(today: dt.date|None = None) -> tuple[int, int]:
     """
     Purpose:
         - return the year, month for 6-month ago
+        - switch to 1 year history - 2026-03-04
     """
     if not today: today = dt.date.today()
-    criteria = today.month < 6
-    return today.year - criteria, today.month - 6 + 12 * criteria 
+    # criteria = today.month < 6
+    # return today.year - criteria, today.month - 6 + 12 * criteria 
+    return today.year - 1, today.month
 
 
 def _change_acc_category_transfer(acc: pd.DataFrame) -> pd.DataFrame:
