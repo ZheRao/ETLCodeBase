@@ -128,20 +128,6 @@ def _prepare_actuals_for_budget(df: pd.DataFrame) -> pd.DataFrame:
     return actuals
 
 
-def _write_fx(fx:float) -> None:
-    """
-    Purpose:
-        - write fx out as a system state
-    """
-    path = files("ETLCodeBase.json_configs").joinpath("state/fx.json")
-    meta = {
-        "fx": fx,
-        "timestamp": dt.datetime.now().isoformat()
-    }
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(meta, f, indent=4, ensure_ascii=False)
-
-
 
 def process_finance(write_out:bool=True) -> pd.DataFrame:
     """
@@ -160,8 +146,8 @@ def process_finance(write_out:bool=True) -> pd.DataFrame:
     path_config = read_configs(config_type="io",name="path.json")
     df = pd.read_csv(Path(path_config["root"]) / Path(path_config["silver"]["PL"]) / "ProfitAndLoss.csv", dtype={"Class":str, "ClassID":str})
     if len(df.FXRate.unique()) != 1: raise ValueError(f"Expected silver QBO PL FX rate to be singular across all records, got {df.FXRate.unique()}")
-    fx = df.loc[0,"FXRate"]
-    _write_fx(fx=fx)
+    # fx = df.loc[0,"FXRate"]
+    # _write_fx(fx=fx)
     
     df = _process_dates(df=df)
     df = _process_location(df=df)

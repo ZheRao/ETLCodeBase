@@ -4,6 +4,7 @@ from pathlib import Path
 import os
 import datetime as dt
 import requests
+from typing import Callable
 import json
 from intuitlib.client import AuthClient
 import urllib.parse
@@ -14,8 +15,91 @@ import yaml
 from io import StringIO
 from bs4 import BeautifulSoup
 import time
+from importlib.resources import files
 from ETLCodeBase.utils.filesystem import read_configs
 
+
+def _usd_cad_boc_daily(session: requests.Session) -> float:
+    url = "https://www.bankofcanada.ca/valet/observations/FXUSDCAD/json"
+    r = session.get(url, timeout=10)
+    r.raise_for_status()
+    data = r.json()
+
+    obs = data.get("observations") or []
+    if not obs:
+        raise RuntimeError("BoC Valet returned no observations")
+
+    latest = obs[-1]
+    rate_str = latest["FXUSDCAD"]["v"]
+    return float(rate_str)
+
+def _alpha_vantage_rate(session: requests.Session) -> float:
+    key = os.getenv("ALPHAVANTAGE_KEY")
+
+    url = (
+        "https://www.alphavantage.co/query?"
+        "function=CURRENCY_EXCHANGE_RATE"
+        "&from_currency=USD&to_currency=CAD"
+        f"&apikey={key}"
+    )
+    r = session.get(url, timeout=10)
+    r.raise_for_status()
+    j = r.json()
+    try:
+        return float(j["Realtime Currency Exchange Rate"]["5. Exchange Rate"])
+    except Exception as e:
+        raise RuntimeError(f"AlphaVantage payload unexpected: {j}") from e
+
+def _usd_cad_erapi_open(session: requests.Session) -> float:
+    url = "https://open.er-api.com/v6/latest/USD"
+    r = session.get(url, timeout=10)
+    r.raise_for_status()
+    j = r.json()
+
+    if j.get("result") != "success":
+        raise RuntimeError(f"ExchangeRate-API error: {j}")
+
+    return float(j["rates"]["CAD"])
+
+def fetch_usd_cad_with_fallback(
+    session: requests.Session,
+    logger=print,
+) -> float:
+    providers: list[tuple[str, Callable[[requests.Session], float]]] = [
+        ("Bank of Canada (daily)", _usd_cad_boc_daily),
+        ("ExchangeRate-API (open)", _usd_cad_erapi_open),
+        ("AlphaVantage", _alpha_vantage_rate),
+    ]
+
+    last_err: Exception | None = None
+
+    for name, fn in providers:
+        try:
+            logger(f"Trying {name}")
+            rate = fn(session)
+            if not (0.5 < rate < 3.0):  # sanity range for USD/CAD
+                raise RuntimeError(f"{name} returned suspicious rate: {rate}")
+            _write_fx(fx=rate, source=name)
+            return rate
+        except (requests.RequestException, ValueError, KeyError, RuntimeError) as e:
+            last_err = e
+            logger(f"{name} failed: {type(e).__name__}: {e}")
+
+    raise RuntimeError("All FX providers failed") from last_err
+
+def _write_fx(fx:float, source: str) -> None:
+    """
+    Purpose:
+        - write fx out as a system state
+    """
+    path = files("ETLCodeBase.json_configs").joinpath("state/fx.json")
+    meta = {
+        "fx": fx,
+        "timestamp": dt.datetime.now().isoformat(),
+        "source": source
+    }
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=4, ensure_ascii=False)
 
 class Job:
     def __init__(self):
@@ -53,15 +137,24 @@ class Job:
         }
         
     
-    def get_fx(self):
-        key  = os.getenv("ALPHAVANTAGE_KEY")
-        url  = ("https://www.alphavantage.co/query?"
-                "function=CURRENCY_EXCHANGE_RATE"
-                "&from_currency=USD&to_currency=CAD"
-                f"&apikey={key}")
-        rate = float(requests.get(url, timeout=10).json()
-                    ["Realtime Currency Exchange Rate"]["5. Exchange Rate"])
-        self.fx = rate
+    def get_fx(self, use_live_fx: bool = True) -> float:
+        fx_config = read_configs(config_type="state",name="fx.json")
+        default_fx = fx_config["fx"]
+        
+        if not use_live_fx:
+            self.fx = default_fx
+            print(f"not pulling live FX - rate - {default_fx}")
+            return self.fx
+
+        with requests.Session() as s:
+            try:
+                self.fx = fetch_usd_cad_with_fallback(s, logger=print)
+                print(f"FX - {self.fx}")
+                return self.fx
+            except Exception as e:
+                print(f"cannot extract live FX rate ({type(e).__name__}: {e}), default to {default_fx}")
+                self.fx = default_fx
+                return self.fx
     
     def create_log(self, path: Path) -> None:
         self.check_file(path)
@@ -99,18 +192,7 @@ class QBOETL(Job):
         self.GL_raw_cols = ["TransactionDate", "TransactionType", "DocNumber", "IsAdjust", "Name", "Memo", "SplitAcc", "Amount", "Balance"]
         self.acctype_QBO_expense = ["Expense","Cost of Goods Sold", "Other Expense"]
         self.profittype_cube_expense = ["Cost of Goods Sold", "Direct Operating Expenses", "Operating Overheads", "Other Expense"]
-        fx_config = read_configs(config_type="state",name="fx.json")
-        default_fx = fx_config["fx"]
-        if use_live_fx:
-            try:
-                self.get_fx()
-                print(f"FX - {self.fx}")
-            except:
-                print(f"cannot extract live FX rate, default to {default_fx}")
-                self.fx = default_fx
-        else:
-            print(f"not pulling live FX - rate - {default_fx}")
-            self.fx = default_fx
+        self.get_fx()
         
     
     # QBO Extraction methods
