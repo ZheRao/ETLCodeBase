@@ -161,6 +161,9 @@ def process_finance(write_out:bool=True) -> pd.DataFrame:
 
     print("Revising Signs ...")
     df = _revise_signs(df=df,accounts=accounts)
+    
+    df["record_type"] = "ORIGINAL"
+    df["synthetic_group"] = None
 
     print("Saving ...")
     if write_out:

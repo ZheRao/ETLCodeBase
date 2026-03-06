@@ -41,9 +41,9 @@ def _pillar_classification(entry:pd.Series) -> str:
             return "Grain"
         case "outlook"|"seeds usa":
             return "Produce"
-        case "eddystone (cattle)"|"waldeck"|"airdrie":
+        case "eddystone (cattle)"|"waldeck"|"airdrie"|"airdrie (hd)"|"eddystone (hd)"|"waldeck (hd)":
             return "Cattle-Feedlot"
-        case "ashcroft"|"diamond s"|"fraser river ranch"|"home ranch"|"moon ranch"|"wolf ranch"|"calderbank"|"bc cattle mfl"|"britishcolumbia (cattle)":
+        case "ashcroft"|"diamond s"|"fraser river ranch"|"home ranch"|"moon ranch"|"wolf ranch"|"calderbank"|"bc cattle mfl"|"britishcolumbia (cattle)"|"airdrie (h)"|"eddystone (h)"|"waldeck (h)":
             return "Cattle-CowCalf"
         case "seeds"|"nexgen":
             return "Seed"
