@@ -39,7 +39,7 @@ def _pillar_classification(entry:pd.Series) -> str:
     match location:
         case "hafford"|"kamsack"|"prince albert"|"raymore"|"regina"|"swift current"|"the pas"|"camp 4"|"fly creek"|"havre"|"yorkton"|"colorado"|"billings"|"delaware":
             return "Grain"
-        case "outlook"|"seeds usa":
+        case "sk produce"|"seeds usa":
             return "Produce"
         case "eddystone (cattle)"|"waldeck"|"airdrie"|"airdrie (hd)"|"eddystone (hd)"|"waldeck (hd)":
             return "Cattle-Feedlot"
