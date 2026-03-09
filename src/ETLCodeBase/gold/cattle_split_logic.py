@@ -122,7 +122,17 @@ def run_cattle_split(qbo:pd.DataFrame) -> pd.DataFrame:
         - qbo with added split entries and offset records
     """
     cattle = qbo[qbo["Location"].isin(["Airdrie", "Eddystone (cattle)", "Waldeck"])].copy()
+
+    # gather testing totals (original)
+    original_totals = cattle.groupby(["Location"]).agg({"AmountDisplay":"sum"})["AmountDisplay"]
+
+    # split out class that contains feedlot or cow/calf
+
+
     cattle["Location"] = cattle["Location"].replace({"Eddystone (cattle)":"Eddystone"})
+
+    
+
 
     # compute % allocation mapping table
     path_config = read_configs(config_type="io", name="path.json")
@@ -156,7 +166,24 @@ def run_cattle_split(qbo:pd.DataFrame) -> pd.DataFrame:
     cattle_offset = _create_entries(original_df=cattle,mode="offset",info=cattle_offset_info, split_map=split_map)
     cattle_h = _create_entries(original_df=cattle,mode="split",info=cattle_h_info, split_map=split_map)
     cattle_hd = _create_entries(original_df=cattle,mode="split",info=cattle_hd_info, split_map=split_map)
+
     qbo = pd.concat([cattle_h,cattle_hd, cattle_offset,cattle], ignore_index=True)
     qbo["Location"] = qbo["Location"].replace({"Eddystone": "Eddystone (cattle)"})
+
+    # test totals
+    processed_totals = qbo.groupby(["Location"]).agg({"AmountDisplay":"sum"})["AmountDisplay"]
+    eps = 0.01
+    ## splitting totals
+    if abs(processed_totals["Airdrie (H)"] + processed_totals["Airdrie (HD)"] - original_totals["Airdrie"]) > eps: 
+        raise ValueError(f"Airdrie totals don't match, original {original_totals["Airdrie"]}, Head {processed_totals["Airdrie (H)"]}, Head Days {processed_totals["Airdrie (HD)"]}")
+    if abs(processed_totals["Waldeck (H)"] + processed_totals["Waldeck (HD)"] - original_totals["Waldeck"]) > eps:
+        raise ValueError(f"Waldeck totals don't match, original {original_totals["Waldeck"]}, Head {processed_totals["Waldeck (H)"]}, Head Days {processed_totals["Waldeck (HD)"]}")
+    if abs(processed_totals["Eddystone (H)"] + processed_totals["Eddystone (HD)"] - original_totals["Eddystone (cattle)"]) > eps:
+        raise ValueError(f"Eddystone totals don't match, original {original_totals["Eddystone (cattle)"]}, Head {processed_totals["Eddystone (H)"]}, Head Days {processed_totals["Eddystone (HD)"]}")
+    ## offset totals - 0
+    for l in ["Airdrie", "Eddystone (cattle)", "Waldeck"]:
+        if abs(processed_totals[l]) > eps:
+            raise ValueError(f"{l} offset didn't sum to 0 - total after offset {processed_totals[l]}")
+    
     return qbo
 
