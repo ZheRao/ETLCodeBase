@@ -32,6 +32,7 @@ def _extract_budget_25(root:Path) -> pd.DataFrame:
     path = root / "Budgets" / "2025" / "budget.csv"
     df = pd.read_csv(path, usecols=["Location", "AccNum", "FiscalYear", "Month", "DataType", "AmountCAD"])
     df = df[df["Location"]!="Calderbank (grain)"]
+    df["Location"] = df["Location"].replace({"Outlook": "SK Produce"})
     budget_location_rename = {"Airdrie (grain)": "Airdrie", "Airdrie (cattle)": "Airdrie", "Calderbank (cattle)": "Calderbank",
                               "Airdrie (corporate)": "Airdrie", "Seeds USA":"Arizona (produce)"}
     df["Location"] = df["Location"].replace(budget_location_rename)

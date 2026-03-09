@@ -52,14 +52,16 @@ def _clean_location(group:pd.DataFrame) -> pd.DataFrame:
     group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="Wolf Ranch")), "Location"] = "Wolf Ranch"
     group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="SAWP")), "Location"] = "BritishColumbia (produce)"
     group.loc[((group["corp_short"]=="BC")&(group["location_name"]=="SAWP Produce")), "Location"] = "BritishColumbia (produce)"
-    ## Outlook
-    group.loc[((group["corp_short"]=="O")), "Location"] = "Outlook"
+    ## SK Produce
+    group.loc[((group["corp_short"]=="O")), "Location"] = "SK Produce"
     ## others
     group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="Yorkton")), "Location"] = "Yorkton"
     group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="Airdrie")), "Location"] = "Airdrie"
     group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="BC")), "Location"] = "Unassigned"
     group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="Calderbank")), "Location"] = "Calderbank"
-    group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="Eddystone")), "Location"] = "Eddystone (unspecified)"
+    # group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="Eddystone")), "Location"] = "Eddystone (unspecified)"
+    group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="Eddystone Cattle")), "Location"] = "Eddystone (cattle)"
+    group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="Eddystone Grain")), "Location"] = "Eddystone (grain)"
     group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="Hafford")), "Location"] = "Hafford"
     group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="Kamsack")), "Location"] = "Kamsack"
     group.loc[((group["corp_short"]=="CM")&(group["location_name"]=="MFUSA Billings")), "Location"] = "Billings"
