@@ -97,7 +97,7 @@ def _create_entries(mode:str, info:dict, original_df:pd.DataFrame, split_map:pd.
     mode = mode.lower()
     if mode not in ["split","offset"]: raise ValueError(f"'mode' must be entered as one of 'split' or 'offset', entered {mode}")
     # create copied dataframe and label as synthetic 
-    df = original_df.copy(deep=True).reset_index(drop=True); df["record_type"] = info["record_type"]; df["synthetic_group"] = info["synthetic_group"]
+    df = original_df.copy(deep=True).reset_index(drop=True); df["record_type"] = info["record_type"]; df["classification_source"] = info["classification_source"]
     # for splitting: change to new location names, use mapping (location -> %) to append % values - fully vectorized
     if mode == "split": 
         df["Pillar"] = info["Pillar"]
@@ -139,23 +139,24 @@ def run_cattle_split(qbo:pd.DataFrame) -> pd.DataFrame:
     # create additioanl entries
     cattle_h_info = {
         "record_type": "SYNTHETIC_SPLIT",
-        "synthetic_group": "CATTLE_INVENTORY_SPLIT",
+        "classification_source": "CATTLE_INVENTORY",
         "Pillar": "Cattle-CowCalf",
         "location_str_addition": " (H)"
     }
     cattle_hd_info = {
         "record_type": "SYNTHETIC_SPLIT",
-        "synthetic_group": "CATTLE_INVENTORY_SPLIT",
+        "classification_source": "CATTLE_INVENTORY",
         "Pillar": "Cattle-Feedlot",
         "location_str_addition": " (HD)"
     }
     cattle_offset_info = {
         "record_type": "SYNTHETIC_OFFSET",
-        "synthetic_group": "CATTLE_INVENTORY_SPLIT",
+        "classification_source": "CATTLE_INVENTORY",
     }
     cattle_offset = _create_entries(original_df=cattle,mode="offset",info=cattle_offset_info, split_map=split_map)
     cattle_h = _create_entries(original_df=cattle,mode="split",info=cattle_h_info, split_map=split_map)
     cattle_hd = _create_entries(original_df=cattle,mode="split",info=cattle_hd_info, split_map=split_map)
-    qbo = pd.concat([qbo, cattle_h,cattle_hd, cattle_offset,cattle], ignore_index=True)
+    qbo = pd.concat([cattle_h,cattle_hd, cattle_offset,cattle], ignore_index=True)
+    qbo["Location"] = qbo["Location"].replace({"Eddystone": "Eddystone (cattle)"})
     return qbo
 
