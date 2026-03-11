@@ -73,9 +73,9 @@ def _extract_perc(df: pd.DataFrame, inventory_column:str, path_config:dict) -> p
     Note:
         - future: add tests for sum to 1 per location + 0 <= perc <= 1 for all percentages
     """
-    split_location = ["Airdrie (H)", "Airdrie (HD)", "Eddystone (H)", "Eddystone (HD)", "Waldeck (H)", "Waldeck (HD)"]
+    split_location = ["Airdrie (CC)", "Airdrie (HD)", "Eddystone (CC)", "Eddystone (HD)", "Waldeck (CC)", "Waldeck (HD)"]
     df_split = df[df["Location"].isin(split_location)].copy(deep=True).reset_index(drop=True).rename(columns={inventory_column:"inventory"})
-    df_split.loc[df_split["Location"].str.contains("(H)", regex=False), "inventory"] *= 365 # convert H to HD to compute percentage
+    df_split.loc[df_split["Location"].str.contains("(CC)", regex=False), "inventory"] *= 365 # convert H to HD to compute percentage
     # compute and append total inventory in HD for each location
     for l in ["Airdrie", "Eddystone", "Waldeck"]:
         mask = df_split["Location"].str.contains(l, case=False)
@@ -114,25 +114,50 @@ def _create_entries(mode:str, info:dict, original_df:pd.DataFrame, split_map:pd.
         df[col] *= df["split_perc"]
     return df
 
-def run_cattle_split(qbo:pd.DataFrame) -> pd.DataFrame:
+def _class_redirection(df:pd.DataFrame, mode:str) -> pd.DataFrame:
     """
-    Input:
-        - qbo: original Gold QBO table
-    Output:
-        - qbo with added split entries and offset records
+    Purpose:
+        - change a data frame's location to include (CC) or (HD) based on class label, indicated by mode
+        - for every transactions create a new transactions with desired location name + an offset
+        - input: df with `mode` included in it's `Class`
+        - output: 2 copies of the original df, 1 copy for class reroute (location name change), 1 copy for offset
     """
-    cattle = qbo[qbo["Location"].isin(["Airdrie", "Eddystone (cattle)", "Waldeck"])].copy()
+    # create new transactions with updated location
+    df_new = df.copy(deep=True)
+    mode = mode.lower()
+    if mode not in ["feedlot", "cowcalf"]: raise KeyError(f"Please enter mode as one of 'feedlot' or 'cowcalf' - entered {mode}")
+    match mode:
+        case "feedlot":
+            pillar = "Cattle-Feedlot"
+            location_addition = " (HD)"
+        case "cowcalf":
+            pillar = "Cattle-CowCalf"
+            location_addition = " (CC)"
+    df_new["Pillar"] = pillar 
+    df_new["Location"] = df_new["Location"].replace({"Eddystone (cattle)": "Eddystone"})
+    df_new["Location"] += location_addition 
+    df_new["record_type"] = "CLASS_DIRECT"
+    df_new["classification_source"] = "CLASS_LABEL"
+    df_new["Memo"] = f"'{mode}' Class Redirect - " + df_new["Memo"]
 
-    # gather testing totals (original)
-    original_totals = cattle.groupby(["Location"]).agg({"AmountDisplay":"sum"})["AmountDisplay"]
+    # create offset transactions
+    amount_columns = ["Amount", "AmountAdj", "AmountCAD", "AmountDisplay"]
+    df_offset = df.copy(deep=True)
+    for col in amount_columns:
+        df_offset[col] *= -1
+    df_offset["record_type"] = "CLASS_OFFSET"
+    df_offset["classification_source"] = "CLASS_LABEL"
+    df_offset["Memo"] = "Offset-" + df_offset["Memo"]
+    return pd.concat([df_new, df_offset], ignore_index=True)
 
-    # split out class that contains feedlot or cow/calf
-
-
+def _algorithm_split(cattle: pd.DataFrame) -> pd.DataFrame:
+    """
+    Purpose: 
+        - split transactions + offset for non-class labeled transactions
+        - input: qbo data frame filtered to the three locations
+        - output: 3 copies of original df, 2 copies are splits, 1 copy for offset
+    """
     cattle["Location"] = cattle["Location"].replace({"Eddystone (cattle)":"Eddystone"})
-
-    
-
 
     # compute % allocation mapping table
     path_config = read_configs(config_type="io", name="path.json")
@@ -151,7 +176,7 @@ def run_cattle_split(qbo:pd.DataFrame) -> pd.DataFrame:
         "record_type": "SYNTHETIC_SPLIT",
         "classification_source": "CATTLE_INVENTORY",
         "Pillar": "Cattle-CowCalf",
-        "location_str_addition": " (H)"
+        "location_str_addition": " (CC)"
     }
     cattle_hd_info = {
         "record_type": "SYNTHETIC_SPLIT",
@@ -166,20 +191,51 @@ def run_cattle_split(qbo:pd.DataFrame) -> pd.DataFrame:
     cattle_offset = _create_entries(original_df=cattle,mode="offset",info=cattle_offset_info, split_map=split_map)
     cattle_h = _create_entries(original_df=cattle,mode="split",info=cattle_h_info, split_map=split_map)
     cattle_hd = _create_entries(original_df=cattle,mode="split",info=cattle_hd_info, split_map=split_map)
+    cattle = pd.concat([cattle_h,cattle_hd, cattle_offset], ignore_index=True)
+    cattle["Location"] = cattle["Location"].replace({"Eddystone": "Eddystone (cattle)"})
+    return cattle
 
-    qbo = pd.concat([cattle_h,cattle_hd, cattle_offset,cattle], ignore_index=True)
-    qbo["Location"] = qbo["Location"].replace({"Eddystone": "Eddystone (cattle)"})
+def run_cattle_split(qbo:pd.DataFrame) -> pd.DataFrame:
+    """
+    Input:
+        - qbo: original Gold QBO table
+    Output:
+        - qbo with added split entries and offset records
+    """
+    cattle = qbo[qbo["Location"].isin(["Airdrie", "Eddystone (cattle)", "Waldeck"])].copy()
+
+    # gather testing totals (original)
+    original_totals = cattle.groupby(["Location"]).agg({"AmountDisplay":"sum"})["AmountDisplay"]
+
+    # splitting - class
+    cattle_class_feedlot = cattle[cattle["Class"].str.contains(r"(?:\bFeedlot\b)",regex=True, case=False, na=False)].copy(deep=True)
+    cattle_class_cow = cattle[cattle["Class"].str.contains(r"(?:\bcow\/calf\b)",regex=True, case=False, na=False)].copy(deep=True)
+
+    # splitting - non-class
+    cattle = cattle[~cattle["Class"].str.contains(r"(?:\bFeedlot\b|\bcow\/calf\b)",regex=True, case=False, na=False)].copy(deep=True)
+
+    # class splitting
+    print("class splitting ... \n")
+    cattle_class_feedlot = _class_redirection(df=cattle_class_feedlot, mode="feedlot")
+    cattle_class_cow = _class_redirection(df=cattle_class_cow, mode="cowcalf")
+
+    # algorithmic splitting
+    print("algorithmis splitting ... \n")
+    cattle = _algorithm_split(cattle=cattle)
+
+    # combining
+    qbo = pd.concat([qbo, cattle_class_feedlot, cattle_class_cow, cattle], ignore_index=True)
 
     # test totals
     processed_totals = qbo.groupby(["Location"]).agg({"AmountDisplay":"sum"})["AmountDisplay"]
     eps = 0.01
     ## splitting totals
-    if abs(processed_totals["Airdrie (H)"] + processed_totals["Airdrie (HD)"] - original_totals["Airdrie"]) > eps: 
-        raise ValueError(f"Airdrie totals don't match, original {original_totals["Airdrie"]}, Head {processed_totals["Airdrie (H)"]}, Head Days {processed_totals["Airdrie (HD)"]}")
-    if abs(processed_totals["Waldeck (H)"] + processed_totals["Waldeck (HD)"] - original_totals["Waldeck"]) > eps:
-        raise ValueError(f"Waldeck totals don't match, original {original_totals["Waldeck"]}, Head {processed_totals["Waldeck (H)"]}, Head Days {processed_totals["Waldeck (HD)"]}")
-    if abs(processed_totals["Eddystone (H)"] + processed_totals["Eddystone (HD)"] - original_totals["Eddystone (cattle)"]) > eps:
-        raise ValueError(f"Eddystone totals don't match, original {original_totals["Eddystone (cattle)"]}, Head {processed_totals["Eddystone (H)"]}, Head Days {processed_totals["Eddystone (HD)"]}")
+    if abs(processed_totals["Airdrie (CC)"] + processed_totals["Airdrie (HD)"] - original_totals["Airdrie"]) > eps: 
+        raise ValueError(f"Airdrie totals don't match, original {original_totals["Airdrie"]}, Head {processed_totals["Airdrie (CC)"]}, Head Days {processed_totals["Airdrie (HD)"]}")
+    if abs(processed_totals["Waldeck (CC)"] + processed_totals["Waldeck (HD)"] - original_totals["Waldeck"]) > eps:
+        raise ValueError(f"Waldeck totals don't match, original {original_totals["Waldeck"]}, Head {processed_totals["Waldeck (CC)"]}, Head Days {processed_totals["Waldeck (HD)"]}")
+    if abs(processed_totals["Eddystone (CC)"] + processed_totals["Eddystone (HD)"] - original_totals["Eddystone (cattle)"]) > eps:
+        raise ValueError(f"Eddystone totals don't match, original {original_totals["Eddystone (cattle)"]}, Head {processed_totals["Eddystone (CC)"]}, Head Days {processed_totals["Eddystone (HD)"]}")
     ## offset totals - 0
     for l in ["Airdrie", "Eddystone (cattle)", "Waldeck"]:
         if abs(processed_totals[l]) > eps:

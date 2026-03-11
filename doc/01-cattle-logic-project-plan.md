@@ -84,7 +84,7 @@ class contains {"Feedlot", "Cow/Calf"}
 Processing:
 ```text
 pillar = class mapping
-record_layer = ORIGINAL
+record_layer = CLASS_DIRECT
 classification_source = CLASS_LABEL
 ```
 
