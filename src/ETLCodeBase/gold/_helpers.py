@@ -34,16 +34,15 @@ def _pillar_classification(entry:pd.Series) -> str:
         return "Produce"
     elif "grain" in location:
         return "Grain"
-    elif "corporate" in location:
-        return "Unclassified"
     match location:
-        case "hafford"|"kamsack"|"prince albert"|"raymore"|"regina"|"swift current"|"the pas"|"camp 4"|"fly creek"|"havre"|"yorkton"|"colorado"|"billings"|"delaware":
+        case "hafford"|"kamsack"|"prince albert"|"raymore"|"regina"|"swift current"|"the pas"|"camp 4"|"fly creek"|"havre"|"yorkton"|"colorado"|"billings"|"delaware"|"eddystone (corporate)":
             return "Grain"
         case "sk produce"|"seeds usa":
             return "Produce"
         case "eddystone (cattle)"|"waldeck"|"airdrie"|"airdrie (hd)"|"eddystone (hd)"|"waldeck (hd)":
             return "Cattle-Feedlot"
-        case "ashcroft"|"diamond s"|"fraser river ranch"|"home ranch"|"moon ranch"|"wolf ranch"|"calderbank"|"bc cattle mfl"|"britishcolumbia (cattle)"|"airdrie (h)"|"eddystone (h)"|"waldeck (h)":
+        case "ashcroft"|"diamond s"|"fraser river ranch"|"home ranch"|"moon ranch"|"wolf ranch"|"calderbank"|"bc cattle mfl"|"britishcolumbia (cattle)"|"airdrie (cc)"|"eddystone (cc)"|\
+                "cache/fischer/loon - dnu"|"waldeck (cc)"|"britishcolumbia (corporate)":
             return "Cattle-CowCalf"
         case "seeds"|"nexgen":
             return "Seed"
